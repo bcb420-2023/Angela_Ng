@@ -1,0 +1,40 @@
+---
+title: "Docker Homework Assignment"
+author: "Angela Ng"
+date: "`r format(Sys.time(), '%d %b %Y')`"
+output: 
+  html_document:
+    df_print: paged
+---
+
+## 1. Create a 5 by 10 Matrix of Random Integers
+```{r}
+set.seed(01182023)
+randomIntegers <- sample.int(100, size = 50, replace = FALSE)
+randomMatrix <- matrix(randomIntegers, nrow = 5, ncol = 10)
+randomMatrix
+```
+
+## 2. Define column names cond1, cond2,cond3, cond4, cond5, ctrl1, ctrl2, \
+##ctrl3, ctrl4, and ctrl5
+```{r}
+colnames(randomMatrix) <- c("cond1", "cond2", "cond3", "cond4", "cond5", 
+                             "ctrl1", "ctrl2", "ctrl3", "ctrl4", "ctrl5")
+randomMatrix
+```
+
+## 3. Define row names as gene1, gene2, gene3, gene4, and gene5
+```{r}
+rownames(randomMatrix) <- c("gene1", "gene2", "gene3", "gene4", "gene5")
+randomMatrix
+```
+
+## 4. Compute the fold change for each gene
+Assumption: The fold change per gene is calculated for each condition.  The 
+condition that corresponds to the control has the same number as the suffix.
+```{r}
+cond2 <- randomMatrix[ , 1:5]
+cont2 <- randomMatrix[ , 6:10]
+foldChange2 <- log2(cond2/cont2)
+foldChange2
+```
