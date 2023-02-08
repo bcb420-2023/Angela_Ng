@@ -1,0 +1,60 @@
+---
+title: "BCB420 Assignment 1- Data set selection and initial processing"
+author: "Angela Ng"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Introduction
+
+# Download the data
+
+Firstly, we need to download the dataset containing the counts from GEO.  We 
+want to do it so that it is only downloaded once initially.
+
+```{r, message=FALSE, warning=FALSE}
+# Install required packages 
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("GEOquery", quietly = TRUE)) {
+  BiocManager::install("GEOquery")
+}
+
+gse <- "GSE116250"
+gseDirectory <- "/home/rstudio/projects/GSE116250"
+if (!file.exists(gseDirectory)) {
+  # Get supplementary files from GEO
+  suppFiles <- GEOquery::getGEOSuppFiles(gse)
+  fileName <- rownames(suppFiles)[[1]]
+}
+```
+There is only one file from the data set downloaded from GEO.  This is the 
+`GSE116250_rpkm.txt.gz`.  We can now read in the file
+
+```{r, tidy=TRUE}
+expData <- read.delim(fileName, header = TRUE, check.names = FALSE)
+colnames(expData)
+dim(expData)
+```
+From this we see there are 57974 rows and 66 columns in this data set.
+
+# Compute statistics to assess data quality for control and test conditions in dataset
+
+# Map rows to symbols
+
+# Clean
+
+# Questions to address
+
+1. What are the control and test conditions of the dataset?
+2. Why is the dataset of interest to you?
+3. Were there expression values that were not unique for specific genes? How did you handle these?
+4. Were there expression values that could not be mapped to current HUGO symbols?
+5. How many outliers were removed?
+6. How did you handle replicates?
+7. What is the final coverage of your dataset?
+
+# References
