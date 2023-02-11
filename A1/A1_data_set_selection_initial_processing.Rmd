@@ -5,11 +5,16 @@ output:
   html_document:
     toc: true
     toc_depth: 2
+    df_print: paged
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
 
 # Introduction
 
-# Download the data
+## Download the data
 
 Firstly, we need to download the dataset containing the counts from GEO.  We 
 want to do it so that it is only downloaded once initially.
@@ -22,7 +27,24 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 if (!requireNamespace("GEOquery", quietly = TRUE)) {
   BiocManager::install("GEOquery")
 }
-
+if (!requireNamespace("biomart", quietly = TRUE)) {
+  BiocManager::install("biomaRt")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+if (!requireNamespace("tibble", quietly = TRUE)) {
+  install.packages("tibble")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
+suppressPackageStartupMessages({
+  library("biomaRt")
+  library("ggplot2")
+  library("tibble")
+  library("dplyr")
+})
 gse <- "GSE116250"
 gseDirectory <- "/home/rstudio/projects/GSE116250"
 if (!file.exists(gseDirectory)) {
@@ -36,16 +58,143 @@ There is only one file from the data set downloaded from GEO.  This is the
 
 ```{r, tidy=TRUE}
 expData <- read.delim(fileName, header = TRUE, check.names = FALSE)
-colnames(expData)
-dim(expData)
+expData <- tibble::as_tibble(expData)
+head(expData)
 ```
-From this we see there are 57974 rows and 66 columns in this data set.
 
-# Compute statistics to assess data quality for control and test conditions in dataset
+# Exploratory analysis
 
-# Map rows to symbols
+First, let's see how many genes we have measurements for
+```{r}
+dim(expData)
+colnames(expData)
+```
 
-# Clean
+From this we see there are 57974 rows and 66 columns in this data set.  The rows
+correspond to genes and the columns correspond to the different samples.  There
+are 37 samples from dilated cardiomyopathy (DCM), 13 samples from ischemic 
+cardiomyopathy (ICM), and 14 non-failing heards (NF).  In total there are 64 samples.
+
+Next, let's see see how many instances there are of each gene and if there are 
+any duplicates.
+
+```{r}
+geneCountSummary <- sort(table(expData$Gene), decreasing = TRUE)
+knitr::kable(geneCountSummary[which(geneCountSummary > 1)][1:10], type="html")
+```
+
+These duplicates still seem to be genes of interest and not small non-coding 
+RNAs for example.  The gene with the most duplicates at 4 duplicates is 
+`ENSG00000148357`, the common name is HMCN2 and is predicted to enable calcium
+ion binding activity based on results from NCBI.  We will leave these 
+duplicates in the data set.
+
+## Map data to HUGO symbols
+
+In the data set there is a column called `Common_name` but to be safe we will compute our own mapping of genes to their HUGO symbols.
+
+```{r}
+# ensembl <- biomaRt::useMart("ensembl")
+ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+ensemblDatasets <- biomaRt::listDatasets(ensembl)
+ensemblDatasets[grep(ensemblDatasets$dataset, pattern = "sapiens"),]
+ensembl <- biomaRt::useDataset("hsapiens_gene_ensembl", mart = ensembl)
+                     
+# find the human filters we want
+biomartHumanFilters <- biomaRt::listFilters(ensembl)
+knitr::kable(biomartHumanFilters[
+  grep(biomartHumanFilters$name, pattern = "ensembl"), ], format = "html")
+```
+Let's look at what ensembl ID our data has.
+```{r} 
+# Checking the prefix
+unique(substr(expData$Gene, start = 1, stop = 4))
+# Checking if it has version numbers
+grep(expData$Gene, pattern = "\\.")
+```
+This tells us that we should use `ensemble_gene_id`.
+
+The next step is to do the conversion and stash the results to avoid future computations.
+```{r}
+expDataIdConversion <- biomaRt::getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                                        filters = c("ensembl_gene_id"),
+                                        values = expData$Gene,
+                                        mart = ensembl)
+```
+Now, we will examine the number of genes we were able to map.
+```{r}
+numMappedIds <- length(which(expData$Gene %in% expDataIdConversion$ensembl_gene_id))
+# originally was 52094 with grch38
+# compare to the original
+numTotalIds <- length(expData$Gene)
+numTotalIds - numMappedIds
+
+```
+The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were able to be matched with a HUGO identifer successfully.  From this I speculate the authors have done this step similar to how I have done it to achieve the same result. 
+
+The next step to mapping our genes to HUGO identifiers is combining it back with our experiment data.
+```{r}
+expDataMapped <- dplyr::inner_join(expData, expDataIdConversion, by = c("Gene" = "ensembl_gene_id"))
+```
+Now, we will examine if there are any missing hgnc identifiers.
+```{r}
+# let's check if the 'Common_name' column in expData is the same as the HUGO identifiers
+dplyr::filter(expDataMapped, is.na(expDataMapped$hgnc_symbol))
+```
+From this we see there are no missing HUGO identifiers.
+
+## Assessing the quality of our data
+Compute statistics to assess data quality for control and test conditions in dataset
+
+According to edgeR protocol we should filter out weakly expressed and 
+non-informative features.  To do this it's recommended to remove features 
+without at least one read per million in x the samples where x is the size of 
+the smallest group of replicates.  In this case it is 13.
+
+**do we need to do? for rpkm ^**
+
+Note the data set is reads per kilobase million mapped reads (RPKM) meaning the
+data has been normalized to remove differences in sequencing depth and it 
+accounts for gene length.
+
+The paper uses Cufflinks which accounts for transcript length across samples or conditions, positional biases in coverage along the transcript.  These are a concern for intra-sample comparisons.
+
+```{r}
+# see how correlated the samples are
+# get average RPKM in each cohort for each gene
+dcm <- dplyr::select(expData, contains("DCM"))
+# dcmSamples <- dcm[, 2:length(colnames(dcm))]
+dcmAvgRpkm <- rowMeans(dcm)
+
+icm <- dplyr::select(expData, contains("ICM"))
+# icmSamples <- dcm[, 2:length(colnames(dcm))]
+icmAvgRpkm <- rowMeans(icm)
+
+nf <- dplyr::select(expData, contains("NF"))
+nfAvgRpkm <- rowMeans(nf)
+
+avgRpkm <- tibble::tibble(DCM = dcmAvgRpkm, ICM = icmAvgRpkm, NF = nfAvgRpkm)
+
+# ICM vs DCM
+ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
+  ggplot2::geom_point() 
+
+# DCM vs NF
+ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
+  ggplot2::geom_point()
+
+# ICM vs NF
+ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) + 
+  ggplot2::geom_point()
+
+# + 1 to avoid log of 0
+```
+M vs A plot for top 2 most differentially expressed?
+MDS plot
+```{r}
+```
+
+# Normalization
 
 # Questions to address
 
@@ -58,3 +207,4 @@ From this we see there are 57974 rows and 66 columns in this data set.
 7. What is the final coverage of your dataset?
 
 # References
+https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0881-8
