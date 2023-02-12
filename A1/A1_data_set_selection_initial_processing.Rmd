@@ -1,4 +1,4 @@
----
+n---
 title: "BCB420 Assignment 1- Data set selection and initial processing"
 author: "Angela Ng"
 output: 
@@ -51,6 +51,8 @@ if (!file.exists(gseDirectory)) {
   # Get supplementary files from GEO
   suppFiles <- GEOquery::getGEOSuppFiles(gse)
   fileName <- rownames(suppFiles)[[1]]
+} else {
+  fileName <- paste(gseDirectory, "GSE116250_rpkm.txt.gz", sep = "/")
 }
 ```
 There is only one file from the data set downloaded from GEO.  This is the 
@@ -94,7 +96,6 @@ duplicates in the data set.
 In the data set there is a column called `Common_name` but to be safe we will compute our own mapping of genes to their HUGO symbols.
 
 ```{r}
-# ensembl <- biomaRt::useMart("ensembl")
 ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
 ensemblDatasets <- biomaRt::listDatasets(ensembl)
 ensemblDatasets[grep(ensemblDatasets$dataset, pattern = "sapiens"),]
@@ -116,17 +117,24 @@ This tells us that we should use `ensemble_gene_id`.
 
 The next step is to do the conversion and stash the results to avoid future computations.
 ```{r}
-expDataIdConversion <- biomaRt::getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
-                                        filters = c("ensembl_gene_id"),
-                                        values = expData$Gene,
-                                        mart = ensembl)
+conversionStash <- "exp_data_id_conversion.rds"
+if (file.exists(conversionStash)) {
+  expDataIdConversion <- readRDS(conversionStash)
+} else {
+  expDataIdConversion <- biomaRt::getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                                          filters = c("ensembl_gene_id"),
+                                          values = expData$Gene,
+                                          mart = ensembl)
+  saveRDS(expDataIdConversion, conversionStash)
+}
 ```
 Now, we will examine the number of genes we were able to map.
 ```{r}
 numMappedIds <- length(which(expData$Gene %in% expDataIdConversion$ensembl_gene_id))
-# originally was 52094 with grch38
 # compare to the original
 numTotalIds <- length(expData$Gene)
+numMappedIds
+numTotalIds
 numTotalIds - numMappedIds
 
 ```
@@ -144,51 +152,65 @@ dplyr::filter(expDataMapped, is.na(expDataMapped$hgnc_symbol))
 From this we see there are no missing HUGO identifiers.
 
 ## Assessing the quality of our data
-Compute statistics to assess data quality for control and test conditions in dataset
 
-According to edgeR protocol we should filter out weakly expressed and 
-non-informative features.  To do this it's recommended to remove features 
-without at least one read per million in x the samples where x is the size of 
-the smallest group of replicates.  In this case it is 13.
+The data in this data set is in reads per kilobase million mapped reads (RPKM).  This means the data has been normalized by library size and length of the transcript so within each sample it is comparable.  
 
-**do we need to do? for rpkm ^**
+The paper uses Cufflinks which accounts for transcript length across samples or conditions, and positional biases in coverage along the transcript.  These are a concern for intra-sample comparisons.
 
-Note the data set is reads per kilobase million mapped reads (RPKM) meaning the
-data has been normalized to remove differences in sequencing depth and it 
-accounts for gene length.
-
-The paper uses Cufflinks which accounts for transcript length across samples or conditions, positional biases in coverage along the transcript.  These are a concern for intra-sample comparisons.
-
+Let's see how correlated the samples are by plotting the log2 of the mean RPKM for each cohort.
 ```{r}
-# see how correlated the samples are
 # get average RPKM in each cohort for each gene
-dcm <- dplyr::select(expData, contains("DCM"))
-# dcmSamples <- dcm[, 2:length(colnames(dcm))]
+dcm <- dplyr::select(expDataMapped, contains("DCM"))
 dcmAvgRpkm <- rowMeans(dcm)
+expDataMapped$DCM_avg_RPKM <- dcmAvgRpkm
 
-icm <- dplyr::select(expData, contains("ICM"))
-# icmSamples <- dcm[, 2:length(colnames(dcm))]
+icm <- dplyr::select(expDataMapped, contains("ICM"))
 icmAvgRpkm <- rowMeans(icm)
+expDataMapped$ICM_avg_RPKM <- icmAvgRpkm
 
-nf <- dplyr::select(expData, contains("NF"))
+nf <- dplyr::select(expDataMapped, contains("NF"))
 nfAvgRpkm <- rowMeans(nf)
+expDataMapped$NF_avg_RPKM <- nfAvgRpkm
+
 
 avgRpkm <- tibble::tibble(DCM = dcmAvgRpkm, ICM = icmAvgRpkm, NF = nfAvgRpkm)
 
 # ICM vs DCM
 ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
-  ggplot2::geom_point() 
+  ggplot2::geom_point() +
+  ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean DCM RPKM",
+                x = "log2(mean DCM RPKM + 1)",
+                y = "log2(mean ICM RPKM + 1)") +
+  ggplot2::geom_smooth(method = "lm", se = FALSE) + 
+  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
 
 # DCM vs NF
 ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
-  ggplot2::geom_point()
+  ggplot2::geom_point() +
+  ggplot2::labs(title = "Log2 mean DCM RPKM vs Log2 mean NF RPKM",
+                x = "log2(mean NF RPKM + 1)",
+                y = "log2(mean DCM RPKM + 1)") +
+  ggplot2::geom_smooth(method = "lm", se = FALSE) + 
+  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
 
 # ICM vs NF
 ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) + 
-  ggplot2::geom_point()
+  ggplot2::geom_point() +
+  ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean NF RPKM",
+                x = "log2(mean NF RPKM + 1)",
+                y = "log2(mean ICM RPKM + 1)") +
+  ggplot2::geom_smooth(method = "lm", se = FALSE)+ 
+  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
 
 # + 1 to avoid log of 0
+
+rsq <- function (x, y) cor(x, y) ^ 2
+plot1Rsq <- rsq(log2(expDataMapped$ICM_avg_RPKM + 1), log2(expDataMapped$DCM_avg_RPKM + 1))
+
+plot1Rsq
 ```
+These plots show there is a relative good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
+
 M vs A plot for top 2 most differentially expressed?
 MDS plot
 ```{r}
@@ -208,3 +230,4 @@ MDS plot
 
 # References
 https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0881-8
+http://cole-trapnell-lab.github.io/cufflinks/manual/
