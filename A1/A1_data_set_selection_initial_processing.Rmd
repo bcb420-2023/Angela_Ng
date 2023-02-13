@@ -1,4 +1,4 @@
-n---
+---
 title: "BCB420 Assignment 1- Data set selection and initial processing"
 author: "Angela Ng"
 output: 
@@ -38,6 +38,9 @@ if (!requireNamespace("tibble", quietly = TRUE)) {
 }
 if (!requireNamespace("dplyr", quietly = TRUE)) {
   install.packages("dplyr")
+} 
+if (!requireNamespace("ggpubr", quietly = TRUE)) {
+  install.packages("ggpubr")
 }
 suppressPackageStartupMessages({
   library("biomaRt")
@@ -182,7 +185,7 @@ ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
                 x = "log2(mean DCM RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE) + 
-  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
+  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 
 # DCM vs NF
 ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
@@ -191,7 +194,7 @@ ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean DCM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE) + 
-  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
+  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 
 # ICM vs NF
 ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) + 
@@ -200,7 +203,7 @@ ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) +
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE)+ 
-  ggpubr::stat_regline_equation(label.y = 200, aes(label = ..rr.label..))
+  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 
 # + 1 to avoid log of 0
 
@@ -211,12 +214,115 @@ plot1Rsq
 ```
 These plots show there is a relative good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
 
-M vs A plot for top 2 most differentially expressed?
-MDS plot
+Let's make a density plot.  Note the log2 is log2 rpkm + 1 to avoid log of 0
 ```{r}
+# only keep the Gene and columns with RPKM for each sample
+filteredData <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
+# need to reshape the data so have Gene, Sample, log2_rpkm as columns
+pivotedData <- tidyr::pivot_longer(filteredData, cols = !Gene, names_to = "sample", values_to = "rpkm")
+# log2 transform the rpkm column
+pivotedData$log2_rpkm <- log2(pivotedData$rpkm + 1) # + 1 to avoid log 0
+
+# due to the large number of samples each cohort will have their own graph
+pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
+nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
+dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
+icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
+
+ggplot2::ggplot(nfSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+
+ggplot2::ggplot(dcmSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+
+ggplot2::ggplot(icmSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+
+```
+Next we will do a boxplot to compare the samples.  Similarly, due to the large number of replicates each cohort has their own plot.
+```{r}
+ggplot2::ggplot(nfSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggplot2::ggplot(dcmSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggplot2::ggplot(icmSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+Do plot to see where to put rpkm cutoff 
+```{r}
+# try rpkm cutoffs 1 to 10
+expDataMapped$all_avg_rpkm <- rowMeans(expDataMapped[, 3:66])
+numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+numGenesPastCutoffDcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+numGenesPastCutoffIcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+for (i in 1:11) {
+  # do I do this for each gene
+  numGenesPastCutoffNf[i] <- nrow(dplyr::filter(expDataMapped, NF_avg_RPKM >= i - 1))
+  numGenesPastCutoffDcm[i] <- nrow(dplyr::filter(expDataMapped, DCM_avg_RPKM >= i - 1))
+  numGenesPastCutoffIcm[i] <- nrow(dplyr::filter(expDataMapped, ICM_avg_RPKM >= i - 1))
+}
+
+nfPastCutoffs <- tibble::tibble(cohort = "NF", num = as.numeric(numGenesPastCutoffNf), cutoff = c(0:10))
+icmPastCutoffs <- tibble::tibble(cohort = "ICM", num = as.numeric(numGenesPastCutoffIcm), cutoff = c(0:10))
+dcmPastCutoffs <- tibble::tibble(cohort = "DCM", num = as.numeric(numGenesPastCutoffDcm), cutoff = c(0:10))
+
+numPastCutoffs <- rbind(nfPastCutoffs, icmPastCutoffs, dcmPastCutoffs)
+
+
+ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
+  geom_line(aes(color = cohort)) +     
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+To examine the distribution of our data we will create a box plot.
+The authors filtered their data to mean RPKM greater than or equal to 5 for expressed genes.
+
+```{r}
+# only keep the Gene and columns with RPKM for each sample
+filteredData <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
+# need to reshape the data so have Gene, Sample, log2_rpkm as columns
+pivotedData <- tidyr::pivot_longer(filteredData, cols = !Gene, names_to = "sample", values_to = "rpkm")
+pivotedData <- dplyr::filter(pivotedData, rpkm >= 5)
+# log2 transform the rpkm column
+pivotedData$log2_rpkm <- log2(pivotedData$rpkm)
+
+# need to do it for each cohort since too many
+pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
+nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
+dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
+icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
+ggplot(nfSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+# + scale_y_continuous(limits = c(0, 40))
+ggplot(dcmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() +     
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(icmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+# boxplot(as.data.frame(nfSamples[, 3:2]), xlab = "Samples", ylab = "log2 RPKM",
+#         las = 2, cex = 0.5, cex.lab = 0.5,
+#         cex.axis = 0.5, main = "NF RNASeq Samples")
 ```
 
 # Normalization
+** filter the original dataset **
+** apply TMM **
+
 
 # Questions to address
 
