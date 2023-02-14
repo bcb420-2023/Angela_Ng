@@ -6,6 +6,7 @@ output:
     toc: true
     toc_depth: 2
     df_print: paged
+bibliography: A1.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -14,10 +15,13 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 # Introduction
 
+Heart failure has a 5 year mortality rate of 50% and affects 6.5 million adult Americans.  Despite technical and biological advances, later-stage heart failure with reduced ejection fraction (HFrEF) shown to have diverse etiologies and genetic contributions are still considered to evolve via a final common pathway.  Current therapies are also relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can reflect an incomplete understanding of the different biological mechanisms contributing to HFrEF * [@HeartPaper1].
+
+This data set is from a study which looks at 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from NF.  The goal of this study was to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
+
 ## Download the data
 
-Firstly, we need to download the dataset containing the counts from GEO.  We 
-want to do it so that it is only downloaded once initially.
+Firstly, we need to download the data set containing the count information from GEO.  We want to do it so that it is only downloaded once initially so it is saved to a file for future use.
 
 ```{r, message=FALSE, warning=FALSE}
 # Install required packages 
@@ -39,9 +43,6 @@ if (!requireNamespace("tibble", quietly = TRUE)) {
 if (!requireNamespace("dplyr", quietly = TRUE)) {
   install.packages("dplyr")
 } 
-if (!requireNamespace("ggpubr", quietly = TRUE)) {
-  install.packages("ggpubr")
-}
 if (!requireNamespace("edgeR", quietly = TRUE)) {
   install.packages("edgeR")
 }
@@ -51,6 +52,9 @@ if (!requireNamespace("gridExtra", quietly = TRUE)) {
 if (!requireNamespace("limma", quietly = TRUE)) {
   install.packages("limma")
 }
+if(!requireNamespace("tidyr", quietly = TRUE)) {
+  install.packages("tidyr")
+}
 suppressPackageStartupMessages({
   library("biomaRt")
   library("ggplot2")
@@ -58,6 +62,7 @@ suppressPackageStartupMessages({
   library("dplyr")
   library("edgeR")
 })
+
 gse <- "GSE116250"
 gseDirectory <- "/home/rstudio/projects/GSE116250"
 if (!file.exists(gseDirectory)) {
@@ -68,6 +73,7 @@ if (!file.exists(gseDirectory)) {
   fileName <- paste(gseDirectory, "GSE116250_rpkm.txt.gz", sep = "/")
 }
 ```
+
 There is only one file from the data set downloaded from GEO.  This is the 
 `GSE116250_rpkm.txt.gz`.  We can now read in the file
 
@@ -80,6 +86,7 @@ head(expData)
 # Exploratory analysis
 
 First, let's see how many genes we have measurements for
+
 ```{r}
 dim(expData)
 colnames(expData)
@@ -101,34 +108,35 @@ knitr::kable(geneCountSummary[which(geneCountSummary > 1)][1:10], type="html")
 These duplicates still seem to be genes of interest and not small non-coding 
 RNAs for example.  The gene with the most duplicates at 4 duplicates is 
 `ENSG00000148357`, the common name is HMCN2 and is predicted to enable calcium
-ion binding activity based on results from NCBI.  We will leave these 
+ion binding activity based on results from NCBI [@HMCN2].  We will leave these 
 duplicates in the data set.
 
 ## Map data to HUGO symbols
 
-In the data set there is a column called `Common_name` but to be safe we will compute our own mapping of genes to their HUGO symbols.
+In the data set there is a column called `Common_name` but to be safe we will compute our own mapping of genes to their HUGO symbols.  
+
+The paper used GRCh37 to align their reads, currently biomaRt uses GrCh38 so we will use the older GrCh37 for better results.
 
 ```{r, eval=FALSE}
-ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+ensembl <- biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
 ensemblDatasets <- biomaRt::listDatasets(ensembl)
 ensemblDatasets[grep(ensemblDatasets$dataset, pattern = "sapiens"),]
 ensembl <- biomaRt::useDataset("hsapiens_gene_ensembl", mart = ensembl)
-                     
-# find the human filters we want
-biomartHumanFilters <- biomaRt::listFilters(ensembl)
-knitr::kable(biomartHumanFilters[
-  grep(biomartHumanFilters$name, pattern = "ensembl"), ], format = "html")
 ```
+
 Let's look at what ensembl ID our data has.
+
 ```{r} 
 # Checking the prefix
 unique(substr(expData$Gene, start = 1, stop = 4))
 # Checking if it has version numbers
 grep(expData$Gene, pattern = "\\.")
 ```
+
 This tells us that we should use `ensemble_gene_id`.
 
 The next step is to do the conversion and stash the results to avoid future computations.
+
 ```{r}
 conversionStash <- "exp_data_id_conversion.rds"
 if (file.exists(conversionStash)) {
@@ -141,38 +149,45 @@ if (file.exists(conversionStash)) {
   saveRDS(expDataIdConversion, conversionStash)
 }
 ```
+
 Now, we will examine the number of genes we were able to map.
+
 ```{r}
 numMappedIds <- length(which(expData$Gene %in% expDataIdConversion$ensembl_gene_id))
-# compare to the original
-numTotalIds <- length(expData$Gene)
 numMappedIds
+# Compare to the original
+numTotalIds <- length(expData$Gene)
 numTotalIds
 numTotalIds - numMappedIds
 
 ```
-The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were able to be matched with a HUGO identifer successfully.  From this I speculate the authors have done this step similar to how I have done it to achieve the same result. 
 
-The next step to mapping our genes to HUGO identifiers is combining it back with our experiment data.
+The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were successfully matched.  From this I speculate the authors have done this step similar to how I have done it to achieve the same result. 
+
+The next step to mapping our genes to HUGO identifiers is combining it back with our experiment data to annotate them with HUGO identifers.
+
 ```{r}
 expDataMapped <- dplyr::inner_join(expData, expDataIdConversion, by = c("Gene" = "ensembl_gene_id"))
 ```
+
 Now, we will examine if there are any missing hgnc identifiers.
+
 ```{r}
-# let's check if the 'Common_name' column in expData is the same as the HUGO identifiers
 dplyr::filter(expDataMapped, is.na(expDataMapped$hgnc_symbol))
 ```
-From this we see there are no missing HUGO identifiers.
+
+This shows there are no missing HUGO identifiers.
 
 ## Assessing the quality of our data
 
 The data in this data set is in reads per kilobase million mapped reads (RPKM).  This means the data has been normalized by library size and length of the transcript so within each sample it is comparable.  
 
-The paper uses Cufflinks which accounts for transcript length across samples or conditions, and positional biases in coverage along the transcript.  These are a concern for intra-sample comparisons.
+The paper uses Cufflinks which accounts for transcript length across samples or conditions, and positional biases in coverage along the transcript.  These are a concern for intra-sample comparisons [@Cufflinks].
 
-Let's see how correlated the samples are by plotting the log2 of the mean RPKM for each cohort.
+Let's see how correlated the samples are by plotting the log2 of the mean RPKM for each cohort as they have done in [@HeartPaper1].
+
 ```{r}
-# get average RPKM in each cohort for each gene
+# Get average RPKM in each cohort for each gene
 dcm <- dplyr::select(expDataMapped, contains("DCM"))
 dcmAvgRpkm <- rowMeans(dcm)
 expDataMapped$DCM_avg_RPKM <- dcmAvgRpkm
@@ -188,15 +203,17 @@ expDataMapped$NF_avg_RPKM <- nfAvgRpkm
 
 avgRpkm <- tibble::tibble(DCM = dcmAvgRpkm, ICM = icmAvgRpkm, NF = nfAvgRpkm)
 
+# log(mean RPKM + 1) was used to avoid log of 0
+
 # ICM vs DCM
 corIcmDcmPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
   ggplot2::geom_point() +
   ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean DCM RPKM",
                 x = "log2(mean DCM RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
-  ggplot2::geom_smooth(method = "lm", se = FALSE) + 
-  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
-corIcmDcmPlot
+  ggplot2::geom_smooth(method = "lm", se = FALSE) 
+  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label))) 
+corIcmDcmPlot 
 
 # DCM vs NF
 corDcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
@@ -204,8 +221,8 @@ corDcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(D
   ggplot2::labs(title = "Log2 mean DCM RPKM vs Log2 mean NF RPKM",
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean DCM RPKM + 1)") +
-  ggplot2::geom_smooth(method = "lm", se = FALSE) + 
-  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+  ggplot2::geom_smooth(method = "lm", se = FALSE) 
+  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 corDcmNfPlot
 
 # ICM vs NF
@@ -214,20 +231,19 @@ corIcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(I
   ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean NF RPKM",
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
-  ggplot2::geom_smooth(method = "lm", se = FALSE)+ 
-  ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+  ggplot2::geom_smooth(method = "lm", se = FALSE)
+  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 corIcmNfPlot
-
-# + 1 to avoid log of 0
-
-# rsq <- function (x, y) cor(x, y) ^ 2
-# plot1Rsq <- rsq(log2(expDataMapped$ICM_avg_RPKM + 1), log2(expDataMapped$DCM_avg_RPKM + 1))
-# 
-# plot1Rsq
 ```
-These plots show there is a relative good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
 
-Let's make a density plot.  Note the log2 is log2 rpkm + 1 to avoid log of 0
+These plots show there is a good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
+
+Due to the large number of replicates, each cohort has their own plot in the following plots.
+
+### Density Plot
+
+Note the log2 is log2(rpkm + 1) to avoid log of 0.
+
 ```{r}
 # only keep the Gene and columns with RPKM for each sample
 expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
@@ -243,50 +259,79 @@ dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
 icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
 
 nfDensityPlot <- ggplot2::ggplot(nfSamples, aes(x=log2_rpkm, color=sample)) +
-  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  ggplot2::geom_density(key_glyph = draw_key_smooth) +
+  ggplot2::scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from NF samples",
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 nfDensityPlot
 
 dcmDensityPlot <- ggplot2::ggplot(dcmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from DCM samples",
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 dcmDensityPlot
 
 icmDensityPlot <- ggplot2::ggplot(icmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from ICM samples",
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 icmDensityPlot
 ```
-Next we will do a boxplot to compare the samples.  Similarly, due to the large number of replicates each cohort has their own plot.
+
+The density plots above show the data follows a normal distribution.  The three plots all share a resemblance in the distribution of the data.  In each plot the samples all seem to be relatively close together, especially towards the ends of the curve, although there is still some variation at the peak in each cohort.
+
+### Boxplot
+
 ```{r}
 nfBoxPlot <- ggplot2::ggplot(nfSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggplot2::theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggplot2::labs(title = "Log2 RPKM of NF Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)")
 nfBoxPlot
 
 dcmBoxPlot <- ggplot2::ggplot(dcmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  ggplot2::labs(title = "Log2 RPKM of DCM Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)")
 dcmBoxPlot
 
 icmBoxPlot <- ggplot2::ggplot(icmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggplot2::labs(title = "Log2 RPKM of ICM Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)")
 icmBoxPlot
 ```
+
+Based on the boxplots above, there seem to be many outliers for each sample.  As there is no indication they are due to a measurement error they will be kept in this data set.  We can't be sure that these outliers do not represent biological variation.  The boxplots show that the median log2(RPKM) is comparable between all samples.  It is important to note from these boxplots we are not able to see to what extent specific genes are expressed.
 
 Due to the large number of replicates it is unpractical to do an MA plot for each pair of replicates.
 
 # Normalization
-The authors provided the RPKM for this dataset so it has been normalized within samples.  Now we are going to try to normalize via TMM and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
 
-Note the paper was unclear about whether or not normalization between samples was performed so this is an exploratory analysis.
+The authors provided the RPKM for this data set so it has been normalized within samples.  
 
-** should we filter lowly expressed counts too?**
+An important note, the paper was unclear about whether or not normalization between samples was performed so this is an exploratory analysis to see if the data has been normalized between samples as well.
+
+We are going to try to normalize via Trimmed Mean of M-values (TMM) and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
+
+I chose TMM normalization as it normalizes between samples and from the data being in RPKM we know that it has been normalized within samples already. 
 
 ```{r}
 # Extract the cohort and sample number from the original data
-# use gsub instead so get the column names then sub the numbers for nothing and in another sub the characters with nothing
 cohorts <- gsub("[0-9]", "", colnames(expDataMapped)[3:66])
 sampleNum <- gsub("[A-Z]", "", colnames(expDataMapped)[3:66])
 samples <- data.frame(cohorts, sampleNum)
@@ -295,11 +340,12 @@ rownames(samples) <- colnames(expDataMapped)[3:66]
 # Create DGEList object
 expDataGeneRpkmMatrix <- dplyr::select(expDataMapped, -c(1, 2, 67, 68, 69, 70))
 expDataGeneRpkmMatrix <- as.matrix(sapply(expDataGeneRpkmMatrix, as.numeric))
+
 rownames(expDataGeneRpkmMatrix) <- expDataGeneRpkm$Gene
 dgeListObj <- edgeR::DGEList(counts = expDataGeneRpkmMatrix, group = samples$cohorts)
 
 # calculate normalization factors
-dgeListObj <- edgeR::calcNormFactors(dgeListObj, method = "TMM")
+dgeObjNorm <- edgeR::calcNormFactors(dgeListObj, method = "TMM")
 
 # Need to get length of the genes before can calculate back to RPKM
 geneLengthStash <- "exp_data_gene_lengths.rds"
@@ -312,25 +358,25 @@ if (file.exists(geneLengthStash)) {
                                           filters = c("ensembl_gene_id"),
                                           values = rownames(expDataGeneRpkmMatrix),
                                           mart = ensembl)
-
   saveRDS(geneLengths, geneLengthStash)
 }
 geneLengths$gene_length <- geneLengths$end_position - geneLengths$start_position
 
-normRpkm <- edgeR::rpkm(dgeListObj, gene.length = geneLengths$gene_length)
+normRpkm <- edgeR::rpkm(dgeObjNorm, gene.length = geneLengths$gene_length)
 ```
 
-Now let's plot the normalized data
+Now let's plot the normalized data.  An interpretation of the normalized data and how it compares to the pre-normalized data will follow in the next section titled [Comparing pre-normalized and post-normalized data](#Comparing pre-normalized and post-normalized data)
+
 ```{r}
 genes <- rownames(normRpkm)
-normRpkm <- tibble::as.tibble(normRpkm)
+normRpkm <- tibble::as_tibble(normRpkm)
 normRpkm$Gene <- genes
 
 normPivotedData <- tidyr::pivot_longer(normRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
 # log2 transform the rpkm column
 normPivotedData$log2_rpkm <- log2(normPivotedData$rpkm + 1) # + 1 to avoid log 0
 
-# due to the large number of samples each cohort will have their own graph
+# Due to the large number of samples each cohort will have their own graph
 normPivotedData$cohort <- gsub("[0-9]", "", normPivotedData$sample)
 normNfSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "NF")
 normDcmSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "DCM")
@@ -338,37 +384,98 @@ normIcmSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "ICM"
 
 normNfDenistyPlot <- ggplot2::ggplot(normNfSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from Normalized NF samples", 
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 normNfDenistyPlot
 
 normDcmDenistyPlot <-ggplot2::ggplot(normDcmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from Normalized DCM samples", 
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 normDcmDenistyPlot
 
 normIcmDenistyPlot <- ggplot2::ggplot(normIcmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
-  scale_x_continuous(limits = c(-2, 12))
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of log2(RPKM) from Normalized ICM samples", 
+                x = "log2(RPKM + 1)",
+                y = "Smoothing density of log2(RPKM + 1)",
+                color = "Sample")
 normIcmDenistyPlot
 ```
+
 Now we will do a boxplot to compare as well.
 
 ```{r}
 normNfBoxPlot <- ggplot2::ggplot(normNfSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggplot2::theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  ggplot2::labs(title = "Log2 RPKM of Normalized NF Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)") +
+  ggplot2::scale_y_continuous(limits = c(0, 30))
 normNfBoxPlot
 
 normDcmBoxPlot <- ggplot2::ggplot(normDcmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggplot2::theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggplot2::labs(title = "Log2 RPKM of Normalized DCM Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)") +
+  ggplot2::scale_y_continuous(limits = c(0, 30))
 normDcmBoxPlot
 
 normIcmBoxPlot <- ggplot2::ggplot(normIcmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggplot2::theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggplot2::labs(title = "Log2 RPKM of Normalized ICM Samples",
+                x = "Samples",
+                y = "log2(RPKM + 1)") +
+  ggplot2::scale_y_continuous(limits = c(0, 30))
 normIcmBoxPlot
 ```
+
+## Dispersion
+
+Next we will examine how much variance deviates from the mean by looking at the dispersion and the BVC plot:
+
+```{r}
+modelDesign <- model.matrix(~samples$cohorts)
+dispersion <- edgeR::estimateDisp(dgeObjNorm, modelDesign)
+edgeR::plotBCV(dispersion, col.tagwise = "black", col.common = "red", xlab = "Average log RPKM")
+```
+
+The BCV plot shows genes above the red line can be considered differentially expressed.  We see at the left end of the plot there is a higher degree of variation, this can be explained by genes with lower degrees of expression having higher variation.
+
+We will examine the mean-variance relationship next.
+
+```{r, warning=FALSE}
+edgeR::plotMeanVar(dispersion, 
+                   show.raw.vars = TRUE,
+                   show.tagwise.vars = TRUE,
+                   show.ave.raw.vars = TRUE,
+                   NBline = TRUE, 
+                   show.binned.common.disp.vars = FALSE)
+```
+
+From the mean variance plot we see towards the end where the mean gene expression levels are higher there is more overlap between the blue and grey points meaning there are more similar levels of variation at higher levels of gene expression.
+
+Make a MDS plot to examine the distance between samples.
+
+```{r}
+limma::plotMDS(dgeObjNorm, labels=rownames(samples), col = c("darkgreen", "blue")[factor(samples$cohorts)])
+```
+
+The MDS plot shows clustering within each cohort that is DCM with DCM, ICM with ICM, and NF with NF.  There is also some clustering between DCM and ICM.  The authors observed a similar trend when they did a PCA between the 3 cohorts as well.
+
+## Comparing pre-normalized and post-normalized data {#Comparing pre-normalized and post-normalized data}
+
 Let's compare the data to the pre-normalized and post-normalized form.
 
 ```{r}
@@ -382,80 +489,54 @@ gridExtra::grid.arrange(nfBoxPlot, normNfBoxPlot, ncol=2)
 gridExtra::grid.arrange(dcmBoxPlot, normDcmBoxPlot, ncol=2)
 gridExtra::grid.arrange(icmBoxPlot, normIcmBoxPlot, ncol=2)
 ```
-From this we can see the normalized form keeps the same shape as the original data but the values have changed drastically.  We do not want to modify our data so drastically and in addition in my opinion the density graph no longer makes sense since the normalized data puts all the reads at esentially the same value.
 
-Due to these strange plots after normalization and lack of information in the paper about normalization methods other than RPKM used it is concluded the data posted is already normalized.
+From this we can see the normalized form keeps the same shape as the original data but the values have changed drastically.  
 
-## Dispersion
+In the density plots the y axis scale is very different between pre and post normalized form.  I decided to keep the scales different to see how the shapes compare between the two, but it is important to note they are very different.  In the pre-normalized density plots the y axis is from 0 to 2.0.  While in the normalized NF it is 0 to 120000, in normalized DCM it is 0 to 75000, and in normalized ICM it is 0 to 60000.
 
-Looking at the dispersion:
-```{r}
-modelDesign <- model.matrix(~samples$cohorts + samples$sampleNum+0)
-dispersion <- edgeR::estimateDisp(dgeListObj)
-```
+We do not want to modify our data so drastically and in addition, in my opinion, the density graph no longer makes sense since the normalized data puts all the reads at essentially the same value.  This leaves one big spike instead of a normalized curve which is more similar to what we see in the pre-normalized data.
 
-Make a MDS plot
-```{r}
-limma::plotMDS(dgeListObj, labels=rownames(samples), col = c("darkgreen", "blue")[factor(samples$cohorts)])
-```
+In the boxplots we see that the outliers with the highest values previously at 30 have been removed and some of the data at the very bottom near 0 have been removed.  This makes sense since TMM will remove the upper and lower percentage of data points.  The outliers have also become more scattered in the normalized form.
 
-Plot the BCV plot
-```{r}
-edgeR::plotBCV(dispersion, col.tagwise = "black", col.common = "red",)
-```
+Due to the results seen from the plots after normalization and lack of information in the paper about normalization methods used other than RPKM, it is concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable. 
 
-## Mean variance plot
-```{r}
-edgeR::plotMeanVar(dispersion, 
-                   show.raw.vars = TRUE,
-                   show.tagwise.vars = TRUE,
-                   show.ave.raw.vars = TRUE,
-                   NBline = TRUE, 
-                   show.binned.common.disp.vars = FALSE)
-```
-** filter the original dataset **
-** fix graph titles and sclaes**
+# Interpretation and Discussion Questions
 
-Make a PCA plot
-```{r}
-# if (!requireNamespace("ggfortify", quietly = TRUE)) {
-#   install.packages("ggfortify")
-# }
-# library("ggfortify")
-# pcaRes <- prcomp(expDataMapped[, 3:66], scale. = TRUE)
-# ggplot2::autoplot(pcaRes, data = expDataMapped, color)
-```
-# Questions to address
+**1. What are the control and test conditions of the dataset?**
 
-1. What are the control and test conditions of the dataset?
 The control of my data set is non-failing hearts (NF).  There are two test conditions which are dilated cardiomyopathy (DCM) and ischemic cardiomyopathy (ICM).
 
-2. Why is the dataset of interest to you?
+**2. Why is the dataset of interest to you?**
 
-3. Were there expression values that were not unique for specific genes? How did you handle these?
+This data set is of interest to me, because there is potentially an incomplete understanding of the biological mechanisms contributing to HFrEF.  Patients with different etiologies for HFrEF are still receiving relatively the same treatment, even though some have worse prognosis than others like in the case of ICM vs DCM.  Heart failure currently affects millions of people and has a 5 year mortality rate of 50%.
 
-There were 6 specific genes that were repeated.  I decided to leave them in. 
+**3. Were there expression values that were not unique for specific genes? How did you handle these?**
+
+There were 6 specific genes that were repeated.  I decided to keep them in the final data set, because at this point I am not able to tell if these were due to a measurement error or another error and these genes have function so they could be important to look at in the future.
 
 ```{r}
 notUnique <- head(geneCountSummary[which(geneCountSummary > 1)])
 length(notUnique)
 ```
-4. Were there expression values that could not be mapped to current HUGO symbols?
+
+**4. Were there expression values that could not be mapped to current HUGO symbols?**
 
 All expression values were able to be mapped to HUGO symbols.
 
-5. How many outliers were removed?
+**5. How many outliers were removed?**
 
-Based on the box plots there were many outliers for each sample.  
+Based on the box plots there were many outliers for each sample.  I decided to keep them, because we cannot be sure they do not account for biological variation and there's no indication they are present due to measurement errors or other errors of a similar sort. 
 
-6. How did you handle replicates?
+**6. How did you handle replicates?**
 
-The authors decided to filter out genes in their downstream analysis those with mean RPKM < 5.
+Since the data is in RPKM it makes it a little difficult to compare across samples.  Additionally, the authors did not provide information on further normalization methods used.  However, they mentioned in their analysis they considered genes with mean RPKM greater than or equal to 5 across groups to be expressed.  
 
-Do plot to see where to put rpkm cutoff 
-```{r, eval = FALSE}
+This seems like a reasonable way to remove noise since there are 64 replicates total and lowly expressed genes can be from technical errors or other issues.
+
+Other studies have tried a similar approach where they plotted number of genes past an RPKM threshold vs RPKM [@RNASeqBeginner].  Below we will do the same to see if that aligns with how the authors chose mean RPKM greater than or equal to 5 as their threshold. 
+
+```{r}
 # try rpkm cutoffs 1 to 10
-expDataMapped$all_avg_rpkm <- rowMeans(expDataMapped[, 3:66])
 numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
 numGenesPastCutoffDcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
 numGenesPastCutoffIcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
@@ -472,46 +553,27 @@ dcmPastCutoffs <- tibble::tibble(cohort = "DCM", num = as.numeric(numGenesPastCu
 
 numPastCutoffs <- rbind(nfPastCutoffs, icmPastCutoffs, dcmPastCutoffs)
 
-
-ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
-  geom_line(aes(color = cohort)) +     
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-
+ggplot2::ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
+  ggplot2::geom_line(aes(color = cohort)) +     
+  ggplot2::theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggplot2::labs(title = "Number of genes past RPKM cutoff",
+                x = "RPKM cutoff",
+                y = "Number of genes")
 ```
-To examine the distribution of our data we will create a box plot.
-The authors filtered their data to mean RPKM greater than or equal to 5 for expressed genes.
+
+In this plot we see at RPKM cutoff of 5 the samples started to align and displayed a distribution curve.  Thus the authors' choice of 5 as the RPKM cutoff seems reasonable.
 
 ```{r, eval=FALSE}
-# only keep the Gene and columns with RPKM for each sample
-expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
-# need to reshape the data so have Gene, Sample, log2_rpkm as columns
-pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
-pivotedData <- dplyr::filter(pivotedData, rpkm >= 5)
-# log2 transform the rpkm column
-pivotedData$log2_rpkm <- log2(pivotedData$rpkm)
-
-# need to do it for each cohort since too many
-pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
-nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
-dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
-icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
-ggplot(nfSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
-# + scale_y_continuous(limits = c(0, 40))
-ggplot(dcmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() +     
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-ggplot(icmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
-# boxplot(as.data.frame(nfSamples[, 3:2]), xlab = "Samples", ylab = "log2 RPKM",
-#         las = 2, cex = 0.5, cex.lab = 0.5,
-#         cex.axis = 0.5, main = "NF RNASeq Samples")
+# Filter the data set to only keep those with mean RPKM >= 5
+expDataMapped$all_avg_RPKM <- rowMeans(expDataMapped[3:66])
+filteredExpData <- dplyr::filter(expDataMapped, all_avg_RPKM >= 5)
+colnames(filteredExpData)
 ```
-7. What is the final coverage of your dataset?
 
-# References
-https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0881-8
-http://cole-trapnell-lab.github.io/cufflinks/manual/
+**7. What is the final coverage of your dataset?**
+
+The original data set contained 57974 genes and after filtering the genes with low expression, mean RPKM less than 5 across all samples there are 12381 genes left. 
+
+# Results and Conclusion
+
+From this initial processing of the data it was discovered that the data set has already been normalized within samples since RPKM values were provided and normalization across samples were most likely applied as well.  This was concluded from attempting TMM normalization and seeing that the normalized results and pre-normalized data have the same shape.  The data set originally started with 5794 genes and are now left with 12381 genes post filtering for low mean RPKM across samples as the authors did in their study.  All genes were successfully matched to HUGO identifiers as well.
