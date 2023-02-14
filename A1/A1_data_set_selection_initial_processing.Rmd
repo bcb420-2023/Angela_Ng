@@ -7,6 +7,7 @@ output:
     toc_depth: 2
     df_print: paged
 bibliography: A1.bib
+nocite: '@*'
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +16,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 # Introduction
 
-Heart failure has a 5 year mortality rate of 50% and affects 6.5 million adult Americans.  Despite technical and biological advances, later-stage heart failure with reduced ejection fraction (HFrEF) shown to have diverse etiologies and genetic contributions are still considered to evolve via a final common pathway.  Current therapies are also relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can reflect an incomplete understanding of the different biological mechanisms contributing to HFrEF * [@HeartPaper1].
+Heart failure has a 5 year mortality rate of 50% and affects 6.5 million adult Americans.  Despite technical and biological advances, later-stage heart failure with reduced ejection fraction (HFrEF) which have been shown to have diverse etiologies and genetic contributions, are still considered to evolve via a final common pathway.  Current therapies are relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can reflect an incomplete understanding of the different biological mechanisms contributing to HFrEF [@HeartPaper1].
 
 This data set is from a study which looks at 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from NF.  The goal of this study was to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
 
@@ -85,7 +86,7 @@ head(expData)
 
 # Exploratory analysis
 
-First, let's see how many genes we have measurements for
+First, let's see how many genes we have measurements for.
 
 ```{r}
 dim(expData)
@@ -162,7 +163,7 @@ numTotalIds - numMappedIds
 
 ```
 
-The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were successfully matched.  From this I speculate the authors have done this step similar to how I have done it to achieve the same result. 
+The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were successfully matched.
 
 The next step to mapping our genes to HUGO identifiers is combining it back with our experiment data to annotate them with HUGO identifers.
 
@@ -212,7 +213,6 @@ corIcmDcmPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2
                 x = "log2(mean DCM RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE) 
-  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label))) 
 corIcmDcmPlot 
 
 # DCM vs NF
@@ -221,8 +221,7 @@ corDcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(D
   ggplot2::labs(title = "Log2 mean DCM RPKM vs Log2 mean NF RPKM",
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean DCM RPKM + 1)") +
-  ggplot2::geom_smooth(method = "lm", se = FALSE) 
-  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+  ggplot2::geom_smooth(method = "lm", se = FALSE)
 corDcmNfPlot
 
 # ICM vs NF
@@ -232,27 +231,26 @@ corIcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(I
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE)
-  # ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
 corIcmNfPlot
 ```
 
 These plots show there is a good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
 
-Due to the large number of replicates, each cohort has their own plot in the following plots.
+Due to the large number of replicates, each cohort has their own plot in the following sections.
 
 ### Density Plot
 
 Note the log2 is log2(rpkm + 1) to avoid log of 0.
 
 ```{r}
-# only keep the Gene and columns with RPKM for each sample
+# Only keep the Gene and columns with RPKM for each sample
 expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
-# need to reshape the data so have Gene, Sample, log2_rpkm as columns
+# Need to reshape the data so have Gene, Sample, log2_rpkm as columns
 pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
 # log2 transform the rpkm column
 pivotedData$log2_rpkm <- log2(pivotedData$rpkm + 1) # + 1 to avoid log 0
 
-# due to the large number of samples each cohort will have their own graph
+# Due to the large number of samples each cohort will have their own graph
 pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
 nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
 dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
@@ -324,7 +322,7 @@ Due to the large number of replicates it is unpractical to do an MA plot for eac
 
 The authors provided the RPKM for this data set so it has been normalized within samples.  
 
-An important note, the paper was unclear about whether or not normalization between samples was performed so this is an exploratory analysis to see if the data has been normalized between samples as well.
+An important note, the paper was unclear about was whether or not normalization between samples was performed so this is an exploratory analysis to see if the data has been normalized between samples as well.
 
 We are going to try to normalize via Trimmed Mean of M-values (TMM) and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
 
@@ -344,7 +342,7 @@ expDataGeneRpkmMatrix <- as.matrix(sapply(expDataGeneRpkmMatrix, as.numeric))
 rownames(expDataGeneRpkmMatrix) <- expDataGeneRpkm$Gene
 dgeListObj <- edgeR::DGEList(counts = expDataGeneRpkmMatrix, group = samples$cohorts)
 
-# calculate normalization factors
+# Calculate normalization factors
 dgeObjNorm <- edgeR::calcNormFactors(dgeListObj, method = "TMM")
 
 # Need to get length of the genes before can calculate back to RPKM
@@ -474,7 +472,7 @@ limma::plotMDS(dgeObjNorm, labels=rownames(samples), col = c("darkgreen", "blue"
 
 The MDS plot shows clustering within each cohort that is DCM with DCM, ICM with ICM, and NF with NF.  There is also some clustering between DCM and ICM.  The authors observed a similar trend when they did a PCA between the 3 cohorts as well.
 
-## Comparing pre-normalized and post-normalized data {#Comparing pre-normalized and post-normalized data}
+## Comparing pre-normalized and post-normalized data 
 
 Let's compare the data to the pre-normalized and post-normalized form.
 
@@ -541,7 +539,6 @@ numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the 
 numGenesPastCutoffDcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
 numGenesPastCutoffIcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
 for (i in 1:11) {
-  # do I do this for each gene
   numGenesPastCutoffNf[i] <- nrow(dplyr::filter(expDataMapped, NF_avg_RPKM >= i - 1))
   numGenesPastCutoffDcm[i] <- nrow(dplyr::filter(expDataMapped, DCM_avg_RPKM >= i - 1))
   numGenesPastCutoffIcm[i] <- nrow(dplyr::filter(expDataMapped, ICM_avg_RPKM >= i - 1))
@@ -563,11 +560,11 @@ ggplot2::ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
 
 In this plot we see at RPKM cutoff of 5 the samples started to align and displayed a distribution curve.  Thus the authors' choice of 5 as the RPKM cutoff seems reasonable.
 
-```{r, eval=FALSE}
+```{r}
 # Filter the data set to only keep those with mean RPKM >= 5
 expDataMapped$all_avg_RPKM <- rowMeans(expDataMapped[3:66])
 filteredExpData <- dplyr::filter(expDataMapped, all_avg_RPKM >= 5)
-colnames(filteredExpData)
+nrow(filteredExpData)
 ```
 
 **7. What is the final coverage of your dataset?**
@@ -576,4 +573,6 @@ The original data set contained 57974 genes and after filtering the genes with l
 
 # Results and Conclusion
 
-From this initial processing of the data it was discovered that the data set has already been normalized within samples since RPKM values were provided and normalization across samples were most likely applied as well.  This was concluded from attempting TMM normalization and seeing that the normalized results and pre-normalized data have the same shape.  The data set originally started with 5794 genes and are now left with 12381 genes post filtering for low mean RPKM across samples as the authors did in their study.  All genes were successfully matched to HUGO identifiers as well.
+From this initial processing of the data it was discovered that the data set has already been normalized within samples since RPKM values were provided and normalization across samples were most likely applied as well.  This was concluded from attempting TMM normalization and seeing that the normalized results and pre-normalized data have similar shapes regarding where the density was centered and the median of the boxplots.  The data set originally started with 5794 genes and are now left with 12381 genes post filtering for low mean RPKM across samples as the authors did in their study.  All genes were successfully matched to HUGO identifiers as well.
+
+# References
