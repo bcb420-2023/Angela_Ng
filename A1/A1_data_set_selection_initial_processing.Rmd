@@ -118,7 +118,7 @@ In the data set there is a column called `Common_name` but to be safe we will co
 
 The paper used GRCh37 to align their reads, currently biomaRt uses GrCh38 so we will use the older GrCh37 for better results.
 
-```{r, eval=FALSE}
+```{r}
 ensembl <- biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
 ensemblDatasets <- biomaRt::listDatasets(ensembl)
 ensemblDatasets[grep(ensemblDatasets$dataset, pattern = "sapiens"),]
@@ -163,7 +163,7 @@ numTotalIds - numMappedIds
 
 ```
 
-The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were successfully matched.
+The difference between the number of ensembl IDs mapped and the number of genes in the data set are identical.  This means all of the genes were successfully matched.  I suspect that the authors did a similar mapping that I did to get the `Common_name` for the genes and they filtered this data set already.
 
 The next step to mapping our genes to HUGO identifiers is combining it back with our experiment data to annotate them with HUGO identifers.
 
@@ -326,7 +326,7 @@ An important note, the paper was unclear about was whether or not normalization 
 
 We are going to try to normalize via Trimmed Mean of M-values (TMM) and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
 
-I chose TMM normalization as it normalizes between samples and from the data being in RPKM we know that it has been normalized within samples already. 
+I chose TMM normalization as it normalizes between samples and from the data being in RPKM we know that it has been normalized within samples already.  After the normalization factors are calculated I will find the normalized RPKM so it is more comparable to the non-normalized RPKM.
 
 ```{r}
 # Extract the cohort and sample number from the original data
@@ -444,6 +444,7 @@ normIcmBoxPlot
 Next we will examine how much variance deviates from the mean by looking at the dispersion and the BVC plot:
 
 ```{r}
+# Note for future analysis the cohorts are more important than which individual sample the data is from 
 modelDesign <- model.matrix(~samples$cohorts)
 dispersion <- edgeR::estimateDisp(dgeObjNorm, modelDesign)
 edgeR::plotBCV(dispersion, col.tagwise = "black", col.common = "red", xlab = "Average log RPKM")
