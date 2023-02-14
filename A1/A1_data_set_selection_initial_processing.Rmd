@@ -42,11 +42,18 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 if (!requireNamespace("ggpubr", quietly = TRUE)) {
   install.packages("ggpubr")
 }
+if (!requireNamespace("edgeR", quietly = TRUE)) {
+  install.packages("edgeR")
+}
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+  install.packages("gridExtra")
+}
 suppressPackageStartupMessages({
   library("biomaRt")
   library("ggplot2")
   library("tibble")
   library("dplyr")
+  library("edgeR")
 })
 gse <- "GSE116250"
 gseDirectory <- "/home/rstudio/projects/GSE116250"
@@ -98,7 +105,7 @@ duplicates in the data set.
 
 In the data set there is a column called `Common_name` but to be safe we will compute our own mapping of genes to their HUGO symbols.
 
-```{r}
+```{r, eval=FALSE}
 ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
 ensemblDatasets <- biomaRt::listDatasets(ensembl)
 ensemblDatasets[grep(ensemblDatasets$dataset, pattern = "sapiens"),]
@@ -179,47 +186,50 @@ expDataMapped$NF_avg_RPKM <- nfAvgRpkm
 avgRpkm <- tibble::tibble(DCM = dcmAvgRpkm, ICM = icmAvgRpkm, NF = nfAvgRpkm)
 
 # ICM vs DCM
-ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
+corIcmDcmPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(DCM + 1), y = log2(ICM + 1))) +
   ggplot2::geom_point() +
   ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean DCM RPKM",
                 x = "log2(mean DCM RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE) + 
   ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+corIcmDcmPlot
 
 # DCM vs NF
-ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
+corDcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(DCM + 1))) +
   ggplot2::geom_point() +
   ggplot2::labs(title = "Log2 mean DCM RPKM vs Log2 mean NF RPKM",
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean DCM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE) + 
   ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+corDcmNfPlot
 
 # ICM vs NF
-ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) + 
+corIcmNfPlot <- ggplot2::ggplot(data = avgRpkm, aes(x = log2(NF + 1), y = log2(ICM + 1))) + 
   ggplot2::geom_point() +
   ggplot2::labs(title = "Log2 mean ICM RPKM vs Log2 mean NF RPKM",
                 x = "log2(mean NF RPKM + 1)",
                 y = "log2(mean ICM RPKM + 1)") +
   ggplot2::geom_smooth(method = "lm", se = FALSE)+ 
   ggpubr::stat_regline_equation(label.y = 50, aes(label = after_stat(rr.label)))
+corIcmNfPlot
 
 # + 1 to avoid log of 0
 
-rsq <- function (x, y) cor(x, y) ^ 2
-plot1Rsq <- rsq(log2(expDataMapped$ICM_avg_RPKM + 1), log2(expDataMapped$DCM_avg_RPKM + 1))
-
-plot1Rsq
+# rsq <- function (x, y) cor(x, y) ^ 2
+# plot1Rsq <- rsq(log2(expDataMapped$ICM_avg_RPKM + 1), log2(expDataMapped$DCM_avg_RPKM + 1))
+# 
+# plot1Rsq
 ```
 These plots show there is a relative good correlation of the relative magnitude of gene expression between the different samples from different cohorts with some outliers towards the ends.
 
 Let's make a density plot.  Note the log2 is log2 rpkm + 1 to avoid log of 0
 ```{r}
 # only keep the Gene and columns with RPKM for each sample
-filteredData <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
+expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
 # need to reshape the data so have Gene, Sample, log2_rpkm as columns
-pivotedData <- tidyr::pivot_longer(filteredData, cols = !Gene, names_to = "sample", values_to = "rpkm")
+pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
 # log2 transform the rpkm column
 pivotedData$log2_rpkm <- log2(pivotedData$rpkm + 1) # + 1 to avoid log 0
 
@@ -229,39 +239,45 @@ nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
 dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
 icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
 
-ggplot2::ggplot(nfSamples, aes(x=log2_rpkm, color=sample)) +
+nfDensityPlot <- ggplot2::ggplot(nfSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
   scale_x_continuous(limits = c(-2, 12))
+nfDensityPlot
 
-ggplot2::ggplot(dcmSamples, aes(x=log2_rpkm, color=sample)) +
+dcmDensityPlot <- ggplot2::ggplot(dcmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
   scale_x_continuous(limits = c(-2, 12))
+dcmDensityPlot
 
-ggplot2::ggplot(icmSamples, aes(x=log2_rpkm, color=sample)) +
+icmDensityPlot <- ggplot2::ggplot(icmSamples, aes(x=log2_rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
   scale_x_continuous(limits = c(-2, 12))
-
+icmDensityPlot
 ```
 Next we will do a boxplot to compare the samples.  Similarly, due to the large number of replicates each cohort has their own plot.
 ```{r}
-ggplot2::ggplot(nfSamples, aes(x=sample, y=log2_rpkm)) +
+nfBoxPlot <- ggplot2::ggplot(nfSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+nfBoxPlot
 
-ggplot2::ggplot(dcmSamples, aes(x=sample, y=log2_rpkm)) +
+dcmBoxPlot <- ggplot2::ggplot(dcmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dcmBoxPlot
 
-ggplot2::ggplot(icmSamples, aes(x=sample, y=log2_rpkm)) +
+icmBoxPlot <- ggplot2::ggplot(icmSamples, aes(x=sample, y=log2_rpkm)) +
   ggplot2::geom_boxplot(outlier.colour = "blue") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+icmBoxPlot
 ```
 
+Due to the large number of replicates it is unpractical to do an MA plot for each pair of replicates.
 
 
 
 Do plot to see where to put rpkm cutoff 
-```{r}
+```{r, eval = FALSE}
 # try rpkm cutoffs 1 to 10
 expDataMapped$all_avg_rpkm <- rowMeans(expDataMapped[, 3:66])
 numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
@@ -290,11 +306,11 @@ ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
 To examine the distribution of our data we will create a box plot.
 The authors filtered their data to mean RPKM greater than or equal to 5 for expressed genes.
 
-```{r}
+```{r, eval=FALSE}
 # only keep the Gene and columns with RPKM for each sample
-filteredData <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
+expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
 # need to reshape the data so have Gene, Sample, log2_rpkm as columns
-pivotedData <- tidyr::pivot_longer(filteredData, cols = !Gene, names_to = "sample", values_to = "rpkm")
+pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
 pivotedData <- dplyr::filter(pivotedData, rpkm >= 5)
 # log2 transform the rpkm column
 pivotedData$log2_rpkm <- log2(pivotedData$rpkm)
@@ -320,8 +336,117 @@ ggplot(icmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
 ```
 
 # Normalization
+The authors provided the RPKM for this dataset so it has been normalized within samples.  Now we are going to try to normalize via TMM and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
+
+Note the paper was unclear about whether or not normalization between samples was performed so this is an exploratory analysis.
+
+** should we filter lowly expressed counts too?**
+
+```{r}
+# Extract the cohort and sample number from the original data
+# use gsub instead so get the column names then sub the numbers for nothing and in another sub the characters with nothing
+cohorts <- gsub("[0-9]", "", colnames(expDataMapped)[3:66])
+sampleNum <- gsub("[A-Z]", "", colnames(expDataMapped)[3:66])
+samples <- data.frame(cohorts, sampleNum)
+rownames(samples) <- colnames(expDataMapped)[3:66]
+
+# Create DGEList object
+expDataGeneRpkmMatrix <- dplyr::select(expDataMapped, -c(1, 2, 67, 68, 69, 70))
+expDataGeneRpkmMatrix <- as.matrix(sapply(expDataGeneRpkmMatrix, as.numeric))
+rownames(expDataGeneRpkmMatrix) <- expDataGeneRpkm$Gene
+dgeListObj <- edgeR::DGEList(counts = expDataGeneRpkmMatrix, group = samples$cohorts)
+
+# calculate normalization factors
+dgeListObj <- edgeR::calcNormFactors(dgeListObj)
+
+# Need to get length of the genes before can calculate back to RPKM
+geneLengthStash <- "exp_data_gene_lengths.rds"
+if (file.exists(geneLengthStash)) {
+  geneLengths <- readRDS(geneLengthStash)
+} else {
+  geneLengths <- biomaRt::getBM(attributes = c("ensembl_gene_id", 
+                                             "start_position",
+                                             "end_position"),
+                                          filters = c("ensembl_gene_id"),
+                                          values = rownames(expDataGeneRpkmMatrix),
+                                          mart = ensembl)
+
+  saveRDS(geneLengths, geneLengthStash)
+}
+geneLengths$gene_length <- geneLengths$end_position - geneLengths$start_position
+
+normRpkm <- edgeR::rpkm(dgeListObj, gene.length = geneLengths$gene_length)
+```
+
+Now let's plot the normalized data
+```{r}
+genes <- rownames(normRpkm)
+normRpkm <- tibble::as.tibble(normRpkm)
+normRpkm$Gene <- genes
+
+normPivotedData <- tidyr::pivot_longer(normRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
+# log2 transform the rpkm column
+normPivotedData$log2_rpkm <- log2(normPivotedData$rpkm + 1) # + 1 to avoid log 0
+
+# due to the large number of samples each cohort will have their own graph
+normPivotedData$cohort <- gsub("[0-9]", "", normPivotedData$sample)
+normNfSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "NF")
+normDcmSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "DCM")
+normIcmSamples <- dplyr::filter(normPivotedData, normPivotedData$cohort == "ICM")
+
+normNfDenistyPlot <- ggplot2::ggplot(normNfSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+normNfDenistyPlot
+
+normDcmDenistyPlot <-ggplot2::ggplot(normDcmSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+normDcmDenistyPlot
+
+normIcmDenistyPlot <- ggplot2::ggplot(normIcmSamples, aes(x=log2_rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12))
+normIcmDenistyPlot
+```
+Now we will do a boxplot to compare as well.
+
+```{r}
+normNfBoxPlot <- ggplot2::ggplot(normNfSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+normNfBoxPlot
+
+normDcmBoxPlot <- ggplot2::ggplot(normDcmSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+normDcmBoxPlot
+
+normIcmBoxPlot <- ggplot2::ggplot(normIcmSamples, aes(x=sample, y=log2_rpkm)) +
+  ggplot2::geom_boxplot(outlier.colour = "blue") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+normIcmBoxPlot
+```
+Let's compare the data to the pre-normalized and post-normalized form.
+
+```{r}
+# Compare the density plots
+gridExtra::grid.arrange(nfDensityPlot, normNfDenistyPlot, ncol=2)
+gridExtra::grid.arrange(dcmDensityPlot, normDcmDenistyPlot, ncol=2)
+gridExtra::grid.arrange(icmDensityPlot, normIcmDenistyPlot, ncol=2)
+
+# Compare the boxplots
+gridExtra::grid.arrange(nfBoxPlot, normNfBoxPlot, ncol=2)
+gridExtra::grid.arrange(dcmBoxPlot, normDcmBoxPlot, ncol=2)
+gridExtra::grid.arrange(icmBoxPlot, normIcmBoxPlot, ncol=2)
+```
+From this we can see the normalized form keeps the same shape as the original data but the values have changed drastically.  We do not want to modify our data so drastically and in addition in my opinion the density graph no longer makes sense since the normalized data puts all the reads at esentially the same value.
+
+Due to these strange plots after normalization and lack of information in the paper about normalization methods other than RPKM used it is concluded the data posted is already normalized.
+
+## Dispersion
 ** filter the original dataset **
-** apply TMM **
+** fix graph titles and sclaes**
 
 
 # Questions to address
