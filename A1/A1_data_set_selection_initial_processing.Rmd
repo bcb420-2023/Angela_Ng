@@ -48,6 +48,9 @@ if (!requireNamespace("edgeR", quietly = TRUE)) {
 if (!requireNamespace("gridExtra", quietly = TRUE)) {
   install.packages("gridExtra")
 }
+if (!requireNamespace("limma", quietly = TRUE)) {
+  install.packages("limma")
+}
 suppressPackageStartupMessages({
   library("biomaRt")
   library("ggplot2")
@@ -274,67 +277,6 @@ icmBoxPlot
 
 Due to the large number of replicates it is unpractical to do an MA plot for each pair of replicates.
 
-
-
-Do plot to see where to put rpkm cutoff 
-```{r, eval = FALSE}
-# try rpkm cutoffs 1 to 10
-expDataMapped$all_avg_rpkm <- rowMeans(expDataMapped[, 3:66])
-numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
-numGenesPastCutoffDcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
-numGenesPastCutoffIcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
-for (i in 1:11) {
-  # do I do this for each gene
-  numGenesPastCutoffNf[i] <- nrow(dplyr::filter(expDataMapped, NF_avg_RPKM >= i - 1))
-  numGenesPastCutoffDcm[i] <- nrow(dplyr::filter(expDataMapped, DCM_avg_RPKM >= i - 1))
-  numGenesPastCutoffIcm[i] <- nrow(dplyr::filter(expDataMapped, ICM_avg_RPKM >= i - 1))
-}
-
-nfPastCutoffs <- tibble::tibble(cohort = "NF", num = as.numeric(numGenesPastCutoffNf), cutoff = c(0:10))
-icmPastCutoffs <- tibble::tibble(cohort = "ICM", num = as.numeric(numGenesPastCutoffIcm), cutoff = c(0:10))
-dcmPastCutoffs <- tibble::tibble(cohort = "DCM", num = as.numeric(numGenesPastCutoffDcm), cutoff = c(0:10))
-
-numPastCutoffs <- rbind(nfPastCutoffs, icmPastCutoffs, dcmPastCutoffs)
-
-
-ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
-  geom_line(aes(color = cohort)) +     
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-
-```
-To examine the distribution of our data we will create a box plot.
-The authors filtered their data to mean RPKM greater than or equal to 5 for expressed genes.
-
-```{r, eval=FALSE}
-# only keep the Gene and columns with RPKM for each sample
-expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
-# need to reshape the data so have Gene, Sample, log2_rpkm as columns
-pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
-pivotedData <- dplyr::filter(pivotedData, rpkm >= 5)
-# log2 transform the rpkm column
-pivotedData$log2_rpkm <- log2(pivotedData$rpkm)
-
-# need to do it for each cohort since too many
-pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
-nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
-dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
-icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
-ggplot(nfSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
-# + scale_y_continuous(limits = c(0, 40))
-ggplot(dcmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() +     
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-ggplot(icmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
-# boxplot(as.data.frame(nfSamples[, 3:2]), xlab = "Samples", ylab = "log2 RPKM",
-#         las = 2, cex = 0.5, cex.lab = 0.5,
-#         cex.axis = 0.5, main = "NF RNASeq Samples")
-```
-
 # Normalization
 The authors provided the RPKM for this dataset so it has been normalized within samples.  Now we are going to try to normalize via TMM and if the pre-normalization graphs look the same as the post normalization graphs then we know the data has been normalized between samples too.
 
@@ -357,7 +299,7 @@ rownames(expDataGeneRpkmMatrix) <- expDataGeneRpkm$Gene
 dgeListObj <- edgeR::DGEList(counts = expDataGeneRpkmMatrix, group = samples$cohorts)
 
 # calculate normalization factors
-dgeListObj <- edgeR::calcNormFactors(dgeListObj)
+dgeListObj <- edgeR::calcNormFactors(dgeListObj, method = "TMM")
 
 # Need to get length of the genes before can calculate back to RPKM
 geneLengthStash <- "exp_data_gene_lengths.rds"
@@ -445,18 +387,129 @@ From this we can see the normalized form keeps the same shape as the original da
 Due to these strange plots after normalization and lack of information in the paper about normalization methods other than RPKM used it is concluded the data posted is already normalized.
 
 ## Dispersion
+
+Looking at the dispersion:
+```{r}
+modelDesign <- model.matrix(~samples$cohorts + samples$sampleNum+0)
+dispersion <- edgeR::estimateDisp(dgeListObj)
+```
+
+Make a MDS plot
+```{r}
+limma::plotMDS(dgeListObj, labels=rownames(samples), col = c("darkgreen", "blue")[factor(samples$cohorts)])
+```
+
+Plot the BCV plot
+```{r}
+edgeR::plotBCV(dispersion, col.tagwise = "black", col.common = "red",)
+```
+
+## Mean variance plot
+```{r}
+edgeR::plotMeanVar(dispersion, 
+                   show.raw.vars = TRUE,
+                   show.tagwise.vars = TRUE,
+                   show.ave.raw.vars = TRUE,
+                   NBline = TRUE, 
+                   show.binned.common.disp.vars = FALSE)
+```
 ** filter the original dataset **
 ** fix graph titles and sclaes**
 
-
+Make a PCA plot
+```{r}
+# if (!requireNamespace("ggfortify", quietly = TRUE)) {
+#   install.packages("ggfortify")
+# }
+# library("ggfortify")
+# pcaRes <- prcomp(expDataMapped[, 3:66], scale. = TRUE)
+# ggplot2::autoplot(pcaRes, data = expDataMapped, color)
+```
 # Questions to address
 
 1. What are the control and test conditions of the dataset?
+The control of my data set is non-failing hearts (NF).  There are two test conditions which are dilated cardiomyopathy (DCM) and ischemic cardiomyopathy (ICM).
+
 2. Why is the dataset of interest to you?
+
 3. Were there expression values that were not unique for specific genes? How did you handle these?
+
+There were 6 specific genes that were repeated.  I decided to leave them in. 
+
+```{r}
+notUnique <- head(geneCountSummary[which(geneCountSummary > 1)])
+length(notUnique)
+```
 4. Were there expression values that could not be mapped to current HUGO symbols?
+
+All expression values were able to be mapped to HUGO symbols.
+
 5. How many outliers were removed?
+
+Based on the box plots there were many outliers for each sample.  
+
 6. How did you handle replicates?
+
+The authors decided to filter out genes in their downstream analysis those with mean RPKM < 5.
+
+Do plot to see where to put rpkm cutoff 
+```{r, eval = FALSE}
+# try rpkm cutoffs 1 to 10
+expDataMapped$all_avg_rpkm <- rowMeans(expDataMapped[, 3:66])
+numGenesPastCutoffNf <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+numGenesPastCutoffDcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+numGenesPastCutoffIcm <- c(mode="numeric", length=11) # index corresponds to the cutoff - 1
+for (i in 1:11) {
+  # do I do this for each gene
+  numGenesPastCutoffNf[i] <- nrow(dplyr::filter(expDataMapped, NF_avg_RPKM >= i - 1))
+  numGenesPastCutoffDcm[i] <- nrow(dplyr::filter(expDataMapped, DCM_avg_RPKM >= i - 1))
+  numGenesPastCutoffIcm[i] <- nrow(dplyr::filter(expDataMapped, ICM_avg_RPKM >= i - 1))
+}
+
+nfPastCutoffs <- tibble::tibble(cohort = "NF", num = as.numeric(numGenesPastCutoffNf), cutoff = c(0:10))
+icmPastCutoffs <- tibble::tibble(cohort = "ICM", num = as.numeric(numGenesPastCutoffIcm), cutoff = c(0:10))
+dcmPastCutoffs <- tibble::tibble(cohort = "DCM", num = as.numeric(numGenesPastCutoffDcm), cutoff = c(0:10))
+
+numPastCutoffs <- rbind(nfPastCutoffs, icmPastCutoffs, dcmPastCutoffs)
+
+
+ggplot(numPastCutoffs, aes(x=cutoff, y=num)) +
+  geom_line(aes(color = cohort)) +     
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+To examine the distribution of our data we will create a box plot.
+The authors filtered their data to mean RPKM greater than or equal to 5 for expressed genes.
+
+```{r, eval=FALSE}
+# only keep the Gene and columns with RPKM for each sample
+expDataGeneRpkm <- dplyr::select(expDataMapped, -c(2, 67, 68, 69, 70)) 
+# need to reshape the data so have Gene, Sample, log2_rpkm as columns
+pivotedData <- tidyr::pivot_longer(expDataGeneRpkm, cols = !Gene, names_to = "sample", values_to = "rpkm")
+pivotedData <- dplyr::filter(pivotedData, rpkm >= 5)
+# log2 transform the rpkm column
+pivotedData$log2_rpkm <- log2(pivotedData$rpkm)
+
+# need to do it for each cohort since too many
+pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
+nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
+dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
+icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
+ggplot(nfSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+# + scale_y_continuous(limits = c(0, 40))
+ggplot(dcmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() +     
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(icmSamples, aes(x=sample, y=log2_rpkm), fill = sample) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+# boxplot(as.data.frame(nfSamples[, 3:2]), xlab = "Samples", ylab = "log2 RPKM",
+#         las = 2, cex = 0.5, cex.lab = 0.5,
+#         cex.axis = 0.5, main = "NF RNASeq Samples")
+```
 7. What is the final coverage of your dataset?
 
 # References
