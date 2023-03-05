@@ -1,0 +1,19 @@
+---
+title: "BCB420 Assignment 2- Differential Gene expression and Preliminary ORA"
+author: "Angela Ng"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    df_print: paged
+bibliography: A2.bib
+nocite: '@*'
+---
+
+## Introduction
+
+## Differential Gene Expression
+
+## Threshold over-representation analysis
+
+## Interpretation
