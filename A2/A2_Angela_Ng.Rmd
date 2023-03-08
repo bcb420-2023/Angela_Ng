@@ -10,10 +10,115 @@ bibliography: A2.bib
 nocite: '@*'
 ---
 
-## Introduction
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
 
-## Differential Gene Expression
+# Introduction
 
-## Threshold over-representation analysis
+## Data set context
 
-## Interpretation
+The data set being worked n is...
+
+## Normalization and initial data exploration
+
+In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out.  The normalization method of RPKM was the decision made on the authors' part as the data set from GEO came in RPKM.
+
+During initial exploratory analysis when the data was unfiltered by mean RPKM the density plot showed
+
+Note, when normalization was tried on this RPKM data provided from the authors to use TMM it just showed one large spike at zero essentially putting all our data at essentially the same value.  This drastically changed the data from pre-TMM normalization.  We do not want to use normalization to drastically alter the data
+
+Due to the results seen from the plots after normalization and lack of information in the paper about normalization methods used other than RPKM, it is concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable.  More detail about this can be found in the appendix.
+
+Before we begin with differential gene expression analysis and preliminary ORA lets load our normalized and filtered data and include any packages we need going forward.
+```{r}
+# Load in the normalized and filtered data from assignment 1
+finalFilteredData <- "final_filtered_exp_data.rds"
+expData <- readRDS(finalFilteredData)
+
+# Install required packages 
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+if (!requireNamespace("tibble", quietly = TRUE)) {
+  install.packages("tibble")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+} 
+if (!requireNamespace("edgeR", quietly = TRUE)) {
+  install.packages("edgeR")
+}
+if (!requireNamespace("limma", quietly = TRUE)) {
+  install.packages("limma")
+}
+if(!requireNamespace("tidyr", quietly = TRUE)) {
+  install.packages("tidyr")
+}
+suppressPackageStartupMessages({
+  library("ggplot2")
+  library("tibble")
+  library("dplyr")
+  library("edgeR")
+})
+```
+
+# Differential Gene Expression
+
+# Threshold over-representation analysis
+
+# Interpretation
+
+# Appendix
+
+Here I decided to regenerate the density plot for the data.  In Assignment 1 it was noted that the data has been filtered to remove genes whose mean RPKM across all samples was less than 5, as the authors did in their paper.  This is to remove some noise.  
+
+Note, in Assignment 1 the density plots before filtering also looked strange as a lot of the density was at 0 with a very long tail.  This is an indication that I was applying a log to a log since in that original plot I did log2(RPKM + 1).  The reason I decided to plot log2(RPKM + 1) was because in the paper the authors did not mention any other methods applied to the data other than normalizing it with RPKM.  The authors must have done something else to their data other than applying RPKM that they did not document.
+
+I have decided to redo the density plots without using log2 and with the data filtered to only include genes who have mean RPKM greater than 5 across all samples.
+```{r}
+filteredExpData <- dplyr::select(expData, -c(2, 67, 68, 69, 70, -71)) 
+pivotedData <- tidyr::pivot_longer(filteredExpData, cols = !Gene, names_to = "sample", values_to = "rpkm")
+
+pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
+nfSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "NF")
+dcmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "DCM")
+icmSamples <- dplyr::filter(pivotedData, pivotedData$cohort == "ICM")
+
+nfDensityPlot <- ggplot2::ggplot(nfSamples, aes(x=rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) +
+  ggplot2::scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of RPKM from NF samples",
+                x = "RPKM",
+                y = "Smoothing density of RPKM",
+                color = "Sample")
+nfDensityPlot
+
+dcmDensityPlot <- ggplot2::ggplot(dcmSamples, aes(x=rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of RPKM from DCM samples",
+                x = "RPKM",
+                y = "Smoothing density of RPKM",
+                color = "Sample")
+dcmDensityPlot
+
+icmDensityPlot <- ggplot2::ggplot(icmSamples, aes(x=rpkm, color=sample)) +
+  ggplot2::geom_density(key_glyph = draw_key_smooth) + 
+  scale_x_continuous(limits = c(-2, 12)) +
+  ggplot2::labs(title = "Smoothing density of RPKM from ICM samples",
+                x = "RPKM",
+                y = "Smoothing density of RPKM",
+                color = "Sample")
+icmDensityPlot
+```
+Figure: X, updated density plot
+
+Although the data does not look perfect this looks better than the previous density plot from pre-filtering for mean RPKM less than 5 and plotting log2(RPKM + 1).  In the later it appeared all the density was near zero and there was a long tail.
+
+For brevity the code and post normalized plot has not been included in this report as it is not the main focus of this assignment.  Assignment 1 showing the previous pre-normalization and post normalization plots can be found at: https://github.com/bcb420-2023/Angela_Ng/blob/main/A1/A1_data_set_selection_initial_processing.html.
+
+# References
