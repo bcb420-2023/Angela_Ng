@@ -16,15 +16,23 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 # Introduction
 
-## Data set context
+## Data set being analyzed and motivations
 
-The data set being worked n is...
+Heart failure currently has a 5 year mortality rate of 50% affecting 6.5 million adult Americans.  Despite later-stage heart failure with reduced ejection fraction (HFrEF) showing diverse etiologies and genetic contributions they are still considered to evolve via a final common pathway.  Current therapies are relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can be an indication of an incomplete understanding of the different biological mechanisms contributing to HFrEF [@HeartPaper1].
+
+This data set is from a study which looks at 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from non-failing hearts (NF).  The goal of this study was to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
+
+This data set was downloaded from the Gene Expression Omnibus (GEO) and has a GEO accession of [GSE116250](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE116250).
 
 ## Normalization and initial data exploration
 
-In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out.  The normalization method of RPKM was the decision made on the authors' part as the data set from GEO came in RPKM.
+In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out to remove some noise.  The normalization method of RPKM was the decision made on the authors' part as the data set from GEO came in RPKM.  Prior to removing lowly expressed genes with mean RPKM less than 5 there were 57974 genes.  After removing these lowly expressed genes 12381 genes remained.
 
-During initial exploratory analysis when the data was unfiltered by mean RPKM the density plot showed
+All expression values have been mapped to HUGO symbols.  There were 6 specific genes that were repeated and the decision made was to keep them in the final data set.  The reason being at that point it was not possible to tell if they were due to a measurement error or another type of error and those genes could have functions that are important to look at in the future.  The duplicated genes all had frequency of 2 in this data set.
+
+An important note is the normalization and data processing methods were not clearly described by the authors in their original paper.  The data provided was in RPKM meaning it has been normalized by library size and the length of transcript allowing within sample comparisons.  
+
+In Assignment 1, I attempted to perform TMM normalization to see if the authors performed any normalization between samples.  The hypothesis was if the data has been normalized between samples as well then the plots before TMM normalization and after TMM normalization it should be the same.  The result after TMM normalization was in the density plot there was a large spike at 0 essentially making all the data at one point.  This density plot does not make sense.  Furthermore, this is a drastic change to the original data and is undesired.  The conclusion from this initial exploration was the data was posted already normalized so further normalization methods should not be used.
 
 Note, when normalization was tried on this RPKM data provided from the authors to use TMM it just showed one large spike at zero essentially putting all our data at essentially the same value.  This drastically changed the data from pre-TMM normalization.  We do not want to use normalization to drastically alter the data
 
@@ -36,6 +44,11 @@ Before we begin with differential gene expression analysis and preliminary ORA l
 finalFilteredData <- "final_filtered_exp_data.rds"
 expData <- readRDS(finalFilteredData)
 
+# Some duplicate genes were kept from the normalization and initial analysis, let's remove them now as they do not seem to be significant
+expData <- dplyr::distinct(expData, Gene, .keep_all = TRUE)
+```
+
+```{r}
 # Install required packages 
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
@@ -68,9 +81,80 @@ suppressPackageStartupMessages({
 
 # Differential Gene Expression
 
+Looking at the MDS plot from Assignment 1 there is clustering among samples of the same disease cohort so disease status appears to be an important factor in our model.
+
+Let's create the differential expression model.
+```{r}
+# First, we need to extract the cohort and sample number from the expData
+cohorts <- gsub("[0-9]", "", colnames(expData)[3:66])
+sampleNum <- gsub("[A-Z]", "", colnames(expData)[3:66])
+samples <- data.frame(cohorts, sampleNum)
+rownames(samples) <- colnames(expData)[3:66]
+
+# Second, create a linear model
+modelDesign <- model.matrix(~samples$cohorts)
+knitr::kable(head(modelDesign), type="html")
+
+# Missing DCM column?
+
+# Third, create our data matrix
+expMatrix <- as.matrix(expData[, 3:66])
+rownames(expMatrix) <- expData$Gene
+colnames(expMatrix) <- colnames(expData[3:66])
+
+minSet <- Biobase::ExpressionSet(assayData = expMatrix)
+
+# Third, fit the data to our model
+fit <- limma::lmFit(minSet, modelDesign)
+
+# Apply empirical Bayes to compute differential expression for the above model
+bayes <- limma::eBayes(fit, trend = TRUE)
+```
+
+Let's get the top hits
+```{r}
+topFit <- limma::topTable(bayes,
+                         coef = ncol(modelDesign),
+                         adjust.method = "BH",
+                         number = nrow(expMatrix)) # Use BH to adjust 
+# assign HGNC symfols to the topFit table
+outputHits <- merge(expData[, c("Gene", "hgnc_symbol")],
+                    topFit,
+                    by.y=0, by.x=1,
+                    all.y=TRUE)
+# sort hits in increasing p values
+outputHits <- outputHits[order(outputHits$P.Value),]
+head(outputHits)
+# knitr::kable(outputHits[1:10, 2:8], type="html", row.names=FALSE) # look at top 10 hits
+```
+Let's see how many genes are significantly expressed
+```{r}
+length(which(outputHits$P.Value < 0.05))
+```
+There are 6179 genes that are significantly expressed.
+
+The thresholds chosen were 0.05 for the p-value as that is usually a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.  
+
+Let's see the amount that are after correction
+```{r}
+length(which(outputHits$adj.P.Val < 0.05))
+```
+
+There is still a fair amount of genes differentially expressed pass correction at 5236 out of 12381 genes total.  The thresholds chosen were 0.05 for the p-value as that is usually a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.
+
+This makes me think the authors have potentially done some filtering of the data as their data analysis procedure is not well documented since I would have expected a lesser number of genes to be significantly differentially expressed both before and after correction.
+
+## Volcano plot
+## Heatmap
+
 # Threshold over-representation analysis
 
-# Interpretation
+# Interpretation and discussion questions
+
+1. Calculate p-values for each of the genes in your expression set. How many genes were significantly differentially expressed? What thresholds did you use and why?
+2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?
+3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.
+4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.
 
 # Appendix
 
