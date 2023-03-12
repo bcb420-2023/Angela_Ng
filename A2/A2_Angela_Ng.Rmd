@@ -77,6 +77,12 @@ if(!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
 if(!requireNamespace("circlize", quietly = TRUE)) {
   install.packages("circlize")
 }
+if(!requireNamespace("stringr", quietly = TRUE)) {
+  install.packages("stringr")
+}
+if(!requireNamespace("gprofiler2", quietly = TRUE)) {
+  install.packages("gprofiler2")
+}
 suppressPackageStartupMessages({
   library("ggplot2")
   library("tibble")
@@ -84,6 +90,8 @@ suppressPackageStartupMessages({
   library("edgeR")
   library("ComplexHeatmap")
   library("circlize")
+  library("stringr")
+  library("gprofiler2")
 })
 ```
 
@@ -99,6 +107,22 @@ sampleNum <- gsub("[A-Z]", "", colnames(expData)[3:66])
 samples <- data.frame(cohorts, sampleNum)
 rownames(samples) <- colnames(expData)[3:66]
 
+# Let's look at the MDS plot
+limma::plotMDS(expData[, 3:66],
+               col = c("darkgreen", "blue", "purple")[factor(samples$cohorts)],
+               main = "MDS Plot Colored by Cohort"
+               )
+legend("bottomleft",
+       legend = levels(factor(samples$cohorts)),
+       pch = c(1),
+       col = c("darkgreen","blue", "purple"),
+       title = "Cohort",
+       cex = 0.75)
+                         
+```
+
+
+```{r}
 # Second, create a linear model
 modelDesign <- model.matrix(~samples$cohorts)
 knitr::kable(head(modelDesign), type="html")
@@ -246,26 +270,26 @@ heatmap
 After correction:
 ```{r}
 # Get genes which show significant differential expression
-sigGenes <- outputHits$Gene[which(outputHits$adj.P.Val < 0.05)]
-sigExp <- expData[which(expData$Gene %in% sigGenes), ]
-sigGeneNames <- sigExp$Gene
-sigExp <- as.matrix(sigExp[, 3:66])
-rownames(sigExp) <- sigGeneNames
+sigGenesAfterCorrection <- outputHits$Gene[which(outputHits$adj.P.Val < 0.05)]
+sigExpAfterCorrection <- expData[which(expData$Gene %in% sigGenesAfterCorrection), ]
+sigAfterCorrectionGeneNames <- sigExpAfterCorrection$Gene
+sigExpAfterCorrection <- as.matrix(sigExpAfterCorrection[, 3:66])
+rownames(sigExpAfterCorrection) <- sigAfterCorrectionGeneNames
 
 # scale each gene and centre around the mean for row normalization
-heatmapMatrix <- t(scale(t(sigExp)))
+heatmapMatrixAfterCorrection <- t(scale(t(sigExpAfterCorrection)))
 
 # assign heatmap colors
-if (min(heatmapMatrix) == 0) {
-  heatmapCol <- circlize::colorRamp2(c(0, max(heatmapMatrix)),
+if (min(heatmapMatrixAfterCorrection) == 0) {
+  heatmapColAfterCorrection <- circlize::colorRamp2(c(0, max(heatmapMatrixAfterCorrection)),
                            c("white", "red"))
 } else {
-    heatmapCol <- circlize::colorRamp2(c(min(heatmapMatrix), 0, max(heatmapMatrix)),
+    heatmapColAfterCorrection <- circlize::colorRamp2(c(min(heatmapMatrixAfterCorrection), 0, max(heatmapMatrixAfterCorrection)),
                              c("blue", "white", "red"))
 }
 
 # make the heatmap
-heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
+heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrixAfterCorrection),
                                    show_row_dend = TRUE,
                                    show_column_dend = TRUE,
                                    col = heatmapCol,
@@ -273,7 +297,7 @@ heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
                                    show_row_names = FALSE, 
                                    show_heatmap_legend = TRUE,
                                    column_order = 
-                                     stringr::str_sort(colnames(heatmapMatrix),
+                                     stringr::str_sort(colnames(heatmapMatrixAfterCorrection),
                                                        numeric = TRUE),
                                    column_names_gp = gpar(fontsize = 7),
                                    column_names_rot = 90,
@@ -282,9 +306,78 @@ heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
                                    row_title = "Genes")
 heatmap
 ```
+
 Both before and after correction they look almost identical.
 
 # Threshold over-representation analysis
+
+Since the heatmap and the number of genes past multiple hypothesis correction are similar to the heatmap and amount of genes before multiple hypothesis testing I will use the genes shown to be statistically significant before multiple hypothesis testing to keep more results.
+
+With the significantly up-regulated and down-regulated genes let's run a threshold gene set enrichment analysis.  G:Profiler will be used.
+
+First let's divide the genes into up and down-regulated.
+```{r}
+# First divide the genes into up-regulated and down-regulated
+sigExp <- outputHits[which(outputHits$P.Value < 0.05), ]
+upRegulatedGenes <- sigExp[which(sigExp$logFC > 0), ]
+downRegulatedGenes <- sigExp[which(sigExp$logFC < 0), ]
+```
+
+Next, we will use G:Profiler
+```{r}
+# Let's examine the version of annotation data used in G:Profiler
+versionInfo <- gprofiler2::get_version_info(organism = "hsapiens")
+
+versionDF <- as.data.frame(unlist(versionInfo$sources))
+names(versionDF)[1] <- "version"
+versionDF[, "annotation_data"] <- row.names(versionDF)
+
+# only keep those from GO Biological Process, KEGG, Reactome, and Wikipathways
+versionDF <- versionDF[versionDF$annotation_data %in% c("GO:BP.version", "KEGG.version", "REAC.version", "WP.version"), ]
+
+# Reformat the annotation data version table 
+versionDF <- versionDF[, c(2, 1)]
+versionDF$annotation_data <- c("GO:BP", "KEGG", "REAC", "WP")
+row.names(versionDF) <- 1:4
+head(versionDF)
+```
+
+Let's now begin the ORA
+```{r}
+# ORA for all significantly differentially expressed genes 
+gostAll <- gprofiler2::gost(query = sigExp$Gene, 
+                            sources = c("GO:BP", "KEGG", "REAC", "WP"),
+                            significant = FALSE,
+                            user_threshold = 0.05,
+                            correction_method = "fdr",
+                            exclude_iea = TRUE)
+
+gostUp <- gprofiler2::gost(query = upRegulatedGenes$Gene,
+                           sources = c("GO:BP", "KEGG", "REAC", "WP"),
+                            significant = FALSE,
+                            user_threshold = 0.05,
+                            correction_method = "fdr",
+                            exclude_iea = TRUE)
+
+gostDown <- gprofiler2::gost(query = downRegulatedGenes$Gene,
+                           sources = c("GO:BP", "KEGG", "REAC", "WP"),
+                            significant = FALSE,
+                            user_threshold = 0.05,
+                            correction_method = "fdr",
+                            exclude_iea = TRUE)
+```
+
+```{r, fig.cap="Figure X: Manhattan Plot of ORA results for all differentially expressed genes"}
+gprofiler2::gostplot(gostAll)
+```
+
+```{r, fig.cap="Figure X: Manhattan Plot of ORA results for up-regulated genes"}
+gprofiler2::gostplot(gostUp)
+```
+
+```{r, fig.cap="Figure X: Manhattan Plot of ORA results for down-regulated genes"}
+gprofiler2::gostplot(gostDown)
+```
 
 # Interpretation and discussion questions
 
@@ -292,6 +385,11 @@ Both before and after correction they look almost identical.
 2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?
 3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.
 4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.
+
+Which method did you choose and why?
+What annotation data did you use and why? What version of the annotation are you using?
+How many genesets were returned with what thresholds?
+Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?
 
 # Appendix
 
