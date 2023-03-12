@@ -71,11 +71,19 @@ if (!requireNamespace("limma", quietly = TRUE)) {
 if(!requireNamespace("tidyr", quietly = TRUE)) {
   install.packages("tidyr")
 }
+if(!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
+  install.packages("ComplexHeatmap")
+}
+if(!requireNamespace("circlize", quietly = TRUE)) {
+  install.packages("circlize")
+}
 suppressPackageStartupMessages({
   library("ggplot2")
   library("tibble")
   library("dplyr")
   library("edgeR")
+  library("ComplexHeatmap")
+  library("circlize")
 })
 ```
 
@@ -94,8 +102,6 @@ rownames(samples) <- colnames(expData)[3:66]
 # Second, create a linear model
 modelDesign <- model.matrix(~samples$cohorts)
 knitr::kable(head(modelDesign), type="html")
-
-# Missing DCM column?
 
 # Third, create our data matrix
 expMatrix <- as.matrix(expData[, 3:66])
@@ -145,7 +151,138 @@ There is still a fair amount of genes differentially expressed pass correction a
 This makes me think the authors have potentially done some filtering of the data as their data analysis procedure is not well documented since I would have expected a lesser number of genes to be significantly differentially expressed both before and after correction.
 
 ## Volcano plot
+```{r, fig.cap="Figure X: Volcano plots of differentially expressed genes"}
+plot(outputHits$logFC, -log10(outputHits$P.Value), pch = 20,
+     main = "Volcano plot of differential expression in DCM, ICM, and NF",
+     xlim = c(-10, 10),
+     xlab = "logFC",
+     ylab = "-log10(P-value)")
+
+# color points based on if they're upregulated, down regulated or neither
+# upregulated is red
+upregulated <- outputHits[which(outputHits$P.Value < 0.05 & outputHits$logFC > 0), ]
+with(upregulated, points(logFC, -log10(P.Value), pch = 20, col = "red"))
+
+# make downregulated points blue
+downregulated <- outputHits[which(outputHits$P.Value < 0.05 & outputHits$logFC < 0), ]
+with(downregulated, points(logFC -log10(P.Value), pch = 20, col = "blue"))
+
+legend("topright",
+       legend = c("up-regulated", "down-regulated", "neither"), 
+       fill = c("red","blue", "black"),
+       cex = 1)
+
+
+# ggplot2::ggplot(outputHits, x=logFC, y=P.Value) +
+#   ggplot2::geom_point(aes(x=logFC, y=P.Value)) +
+#   ggplot2::xlim(-10, 10)
+ggplot2::ggplot(outputHits, x=logFC, y=-log10(P.Value)) +
+  ggplot2::geom_point(aes(x=logFC, y=-log10(P.Value))) +
+  ggplot2::xlim(-10, 10)
+
+```
+Volcano plot for statistically significant differentially expressed genes past correction.
+```{r}
+plot(outputHits$logFC, -log10(outputHits$adj.P.Val), pch = 20,
+     main = "Volcano plot of differential expression in DCM, ICM, and NF",
+     xlim = c(-10, 10),
+     xlab = "logFC",
+     ylab = "-log10(adjusted P-value)")
+
+# color points based on if they're upregulated, down regulated or neither
+# upregulated is red
+upregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & outputHits$logFC > 0), ]
+with(upregulated, points(logFC, -log10(adj.P.Val), pch = 20, col = "red"))
+
+# make downregulated points blue
+downregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & outputHits$logFC < 0), ]
+with(downregulated, points(logFC -log10(adj.P.Val), pch = 20, col = "blue"))
+
+legend("topright",
+       legend = c("up-regulated", "down-regulated", "neither"), 
+       fill = c("red","blue", "black"),
+       cex = 1)
+```
 ## Heatmap
+Let's make a heatmap with the statistically significant genes both before and after correction.
+```{r}
+# Get genes which show significant differential expression
+sigGenes <- outputHits$Gene[which(outputHits$P.Value < 0.05)]
+sigExp <- expData[which(expData$Gene %in% sigGenes), ]
+sigGeneNames <- sigExp$Gene
+sigExp <- as.matrix(sigExp[, 3:66])
+rownames(sigExp) <- sigGeneNames
+
+# scale each gene and centre around the mean for row normalization
+heatmapMatrix <- t(scale(t(sigExp)))
+
+# assign heatmap colors
+if (min(heatmapMatrix) == 0) {
+  heatmapCol <- circlize::colorRamp2(c(0, max(heatmapMatrix)),
+                           c("white", "red"))
+} else {
+    heatmapCol <- circlize::colorRamp2(c(min(heatmapMatrix), 0, max(heatmapMatrix)),
+                             c("blue", "white", "red"))
+}
+
+# make the heatmap
+heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
+                                   show_row_dend = TRUE,
+                                   show_column_dend = TRUE,
+                                   col = heatmapCol,
+                                   show_column_names = TRUE,
+                                   show_row_names = FALSE, 
+                                   show_heatmap_legend = TRUE,
+                                   column_order = 
+                                     stringr::str_sort(colnames(heatmapMatrix),
+                                                       numeric = TRUE),
+                                   column_names_gp = gpar(fontsize = 7),
+                                   column_names_rot = 90,
+                                   name = "Expression level",
+                                   column_title = "Sample",
+                                   row_title = "Genes")
+heatmap
+```
+After correction:
+```{r}
+# Get genes which show significant differential expression
+sigGenes <- outputHits$Gene[which(outputHits$adj.P.Val < 0.05)]
+sigExp <- expData[which(expData$Gene %in% sigGenes), ]
+sigGeneNames <- sigExp$Gene
+sigExp <- as.matrix(sigExp[, 3:66])
+rownames(sigExp) <- sigGeneNames
+
+# scale each gene and centre around the mean for row normalization
+heatmapMatrix <- t(scale(t(sigExp)))
+
+# assign heatmap colors
+if (min(heatmapMatrix) == 0) {
+  heatmapCol <- circlize::colorRamp2(c(0, max(heatmapMatrix)),
+                           c("white", "red"))
+} else {
+    heatmapCol <- circlize::colorRamp2(c(min(heatmapMatrix), 0, max(heatmapMatrix)),
+                             c("blue", "white", "red"))
+}
+
+# make the heatmap
+heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
+                                   show_row_dend = TRUE,
+                                   show_column_dend = TRUE,
+                                   col = heatmapCol,
+                                   show_column_names = TRUE,
+                                   show_row_names = FALSE, 
+                                   show_heatmap_legend = TRUE,
+                                   column_order = 
+                                     stringr::str_sort(colnames(heatmapMatrix),
+                                                       numeric = TRUE),
+                                   column_names_gp = gpar(fontsize = 7),
+                                   column_names_rot = 90,
+                                   name = "Expression level",
+                                   column_title = "Sample",
+                                   row_title = "Genes")
+heatmap
+```
+Both before and after correction they look almost identical.
 
 # Threshold over-representation analysis
 
