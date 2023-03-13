@@ -107,6 +107,7 @@ sampleNum <- gsub("[A-Z]", "", colnames(expData)[3:66])
 samples <- data.frame(cohorts, sampleNum)
 rownames(samples) <- colnames(expData)[3:66]
 
+# maybe remove MDS plot
 # Let's look at the MDS plot
 limma::plotMDS(expData[, 3:66],
                col = c("darkgreen", "blue", "purple")[factor(samples$cohorts)],
@@ -125,7 +126,7 @@ legend("bottomleft",
 ```{r}
 # Second, create a linear model
 modelDesign <- model.matrix(~samples$cohorts)
-knitr::kable(head(modelDesign), type="html")
+knitr::kable(head(modelDesign), type="html") # probably don't need to display
 
 # Third, create our data matrix
 expMatrix <- as.matrix(expData[, 3:66])
@@ -351,14 +352,14 @@ gostAll <- gprofiler2::gost(query = sigExp$Gene,
                             user_threshold = 0.05,
                             correction_method = "fdr",
                             exclude_iea = TRUE)
-
+# ORA for up-regulated genes
 gostUp <- gprofiler2::gost(query = upRegulatedGenes$Gene,
                            sources = c("GO:BP", "KEGG", "REAC", "WP"),
                             significant = FALSE,
                             user_threshold = 0.05,
                             correction_method = "fdr",
                             exclude_iea = TRUE)
-
+# ORA for down-regulated genes
 gostDown <- gprofiler2::gost(query = downRegulatedGenes$Gene,
                            sources = c("GO:BP", "KEGG", "REAC", "WP"),
                             significant = FALSE,
@@ -367,6 +368,59 @@ gostDown <- gprofiler2::gost(query = downRegulatedGenes$Gene,
                             exclude_iea = TRUE)
 ```
 
+Let's see how many genesets were returned with the threshold 0.05 and what the top results are.
+```{r}
+# Both up-regulated and down-regulated (all genes)
+nrow(gostAll$result)
+head(gostAll$result[order(gostAll$result$p_value, decreasing = FALSE),])
+
+# Just up-regulated
+nrow(gostUp$result)
+head(gostUp$result[order(gostUp$result$p_value, decreasing = FALSE),])
+
+# Just down-regulated
+nrow(gostDown$result)
+head(gostDown$result[order(gostDown$result$p_value, decreasing = FALSE),])
+```
+
+From this we see there are over 10000 genesets returned in each ORA and the top terms returned are very general such as metabolic process.  To combat this we will filter the results to get more specific results.
+
+```{r}
+# Filter the results to only those with term size between 1 and 200 inclusive
+gostAllFilteredResults <- gostAll$result[which(gostAll$result$term_size <= 200 & 
+                                                 gostAll$result$term_size >= 1), ]
+nrow(gostAllFilteredResults)
+nrow(gostAll$result) - nrow(gostAllFilteredResults) # how many results removed
+
+head(gostAllFilteredResults[order(gostAllFilteredResults$p_value, decreasing = FALSE),])
+```
+We now see the results are more specific with the top term being mRNA splicing and 937 terms were removed leaving 12658 for ORA done on both up and down-regulated genes.
+
+```{r}
+# Filter the results to only those with term size between 1 and 200 inclusive
+gostUpFilteredResults <- gostUp$result[which(gostUp$result$term_size <= 200 & 
+                                                 gostUp$result$term_size >= 1), ]
+nrow(gostUpFilteredResults)
+nrow(gostUp$result) - nrow(gostUpFilteredResults) # how many results removed
+
+head(gostUpFilteredResults[order(gostUpFilteredResults$p_value, decreasing = FALSE),])
+```
+
+For up-regulated genes 937 terms were removed leaving 10245 terms and the top one being mitochondrial gene expression.
+
+```{r}
+# Filter the results to only those with term size between 1 and 200 inclusive
+gostDownFilteredResults <- gostDown$result[which(gostDown$result$term_size <= 200 & 
+                                                 gostDown$result$term_size >= 1), ]
+nrow(gostDownFilteredResults)
+nrow(gostDown$result) - nrow(gostDownFilteredResults) # how many results removed
+
+head(gostDownFilteredResults[order(gostDownFilteredResults$p_value, decreasing = FALSE),])
+```
+
+There were 936 terms removed leaving 10438 in down-regulated genes and the top term is now diseases associated with glycosaminoglycan metabolism.
+
+Let's visualize the results with Manhattan plots.  Note the terms above the line are considered significant after correction.
 ```{r, fig.cap="Figure X: Manhattan Plot of ORA results for all differentially expressed genes"}
 gprofiler2::gostplot(gostAll)
 ```
@@ -381,15 +435,68 @@ gprofiler2::gostplot(gostDown)
 
 # Interpretation and discussion questions
 
+1. Do the over-representation results support conclusions or mechanism discussed in the original paper?
+
+Let's see the top result for all genes, up-regulated, and down-regulated based on the annotation source used.
+
+```{r}
+# All genes
+# Get top result by annotation source used
+allTopResults <- gostAllFilteredResults[which(gostAllFilteredResults$source == "GO:BP"), ][1, ]
+allTopResults <- rbind(allTopResults,
+                       gostAllFilteredResults[which(gostAllFilteredResults$source == "KEGG"), ][1, ])
+allTopResults <- rbind(allTopResults,
+                       gostAllFilteredResults[which(gostAllFilteredResults$source == "REAC"), ][1, ])
+allTopResults <- rbind(allTopResults,
+                       gostAllFilteredResults[which(gostAllFilteredResults$source == "WP"), ][1, ])
+row.names(allTopResults) <- c(1:4)
+allTopResults <- subset(allTopResults, select = c(9:11))
+allTopResults
+
+# Up-regulated genes
+# Get top result by annotation source used
+upTopResults <- gostUpFilteredResults[which(gostUpFilteredResults$source == "GO:BP"), ][1, ]
+upTopResults <- rbind(upTopResults,
+                       gostUpFilteredResults[which(gostUpFilteredResults$source == "KEGG"), ][1, ])
+upTopResults <- rbind(upTopResults,
+                       gostUpFilteredResults[which(gostUpFilteredResults$source == "REAC"), ][1, ])
+upTopResults <- rbind(upTopResults,
+                       gostUpFilteredResults[which(gostUpFilteredResults$source == "WP"), ][1, ])
+row.names(upTopResults) <- c(1:4)
+upTopResults <- subset(upTopResults, select = c(9:11))
+upTopResults
+
+# Up-regulated genes
+# Get top result by annotation source used
+downTopResults <- gostDownFilteredResults[which(gostDownFilteredResults$source == "GO:BP"), ][1, ]
+downTopResults <- rbind(downTopResults,
+                       gostDownFilteredResults[which(gostDownFilteredResults$source == "KEGG"), ][1, ])
+downTopResults <- rbind(downTopResults,
+                       gostDownFilteredResults[which(gostDownFilteredResults$source == "REAC"), ][1, ])
+downTopResults <- rbind(downTopResults,
+                       gostDownFilteredResults[which(gostDownFilteredResults$source == "WP"), ][1, ])
+row.names(downTopResults) <- c(1:4)
+downTopResults <- subset(downTopResults, select = c(9:11))
+downTopResults
+```
+2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your results.
+
+https://bmccardiovascdisord.biomedcentral.com/articles/10.1186/s12872-020-01596-w
+https://www.nature.com/articles/s41598-022-26277-w#Sec12
+
+## Differential Gene Expression
 1. Calculate p-values for each of the genes in your expression set. How many genes were significantly differentially expressed? What thresholds did you use and why?
 2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?
 3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.
 4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.
 
-Which method did you choose and why?
-What annotation data did you use and why? What version of the annotation are you using?
-How many genesets were returned with what thresholds?
-Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?
+## Threshold over-representation analysis
+1. Which method did you choose and why?
+2. What annotation data did you use and why? What version of the annotation are you using?
+3. How many genesets were returned with what thresholds?
+4. Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?
+
+The link to the corresponding journal entry can be found here...
 
 # Appendix
 
