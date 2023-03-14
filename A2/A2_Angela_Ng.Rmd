@@ -20,7 +20,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 Heart failure currently has a 5 year mortality rate of 50% affecting 6.5 million adult Americans.  Despite later-stage heart failure with reduced ejection fraction (HFrEF) showing diverse etiologies and genetic contributions they are still considered to evolve via a final common pathway.  Current therapies are relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can be an indication of an incomplete understanding of the different biological mechanisms contributing to HFrEF [@HeartPaper1].
 
-This data set is from a study which looks at 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from non-failing hearts (NF).  The goal of this study was to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
+This data set is from a study which looked at 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from non-failing hearts (NF).  The goal of this study was to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
 
 This data set was downloaded from the Gene Expression Omnibus (GEO) and has a GEO accession of [GSE116250](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE116250).
 
@@ -28,17 +28,16 @@ This data set was downloaded from the Gene Expression Omnibus (GEO) and has a GE
 
 In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out to remove some noise.  The normalization method of RPKM was the decision made on the authors' part as the data set from GEO came in RPKM.  Prior to removing lowly expressed genes with mean RPKM less than 5 there were 57974 genes.  After removing these lowly expressed genes 12381 genes remained.
 
-All expression values have been mapped to HUGO symbols.  There were 6 specific genes that were repeated and the decision made was to keep them in the final data set.  The reason being at that point it was not possible to tell if they were due to a measurement error or another type of error and those genes could have functions that are important to look at in the future.  The duplicated genes all had frequency of 2 in this data set.
+All expression values have been mapped to HUGO symbols.  There were 6 specific genes that were repeated and they have been kept in the final data set.  The reason being at that point it was not possible to tell if they were due to an error such as in measurement or another type of error and those genes could have functions that are important to look at in the future.  The duplicated genes all had frequency of 2 in this data set.
 
 An important note is the normalization and data processing methods were not clearly described by the authors in their original paper.  The data provided was in RPKM meaning it has been normalized by library size and the length of transcript allowing within sample comparisons.  
 
 In Assignment 1, I attempted to perform TMM normalization to see if the authors performed any normalization between samples.  The hypothesis was if the data has been normalized between samples as well then the plots before TMM normalization and after TMM normalization it should be the same.  The result after TMM normalization was in the density plot there was a large spike at 0 essentially making all the data at one point.  This density plot does not make sense.  Furthermore, this is a drastic change to the original data and is undesired.  The conclusion from this initial exploration was the data was posted already normalized so further normalization methods should not be used.
 
-Note, when normalization was tried on this RPKM data provided from the authors to use TMM it just showed one large spike at zero essentially putting all our data at essentially the same value.  This drastically changed the data from pre-TMM normalization.  We do not want to use normalization to drastically alter the data
-
 Due to the results seen from the plots after normalization and lack of information in the paper about normalization methods used other than RPKM, it is concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable.  More detail about this can be found in the appendix.
 
-Before we begin with differential gene expression analysis and preliminary ORA lets load our normalized and filtered data and include any packages we need going forward.
+Before we begin with differential gene expression analysis and preliminary threshold over-representation analysis (ORA) lets load our normalized and filtered data and include any packages we need going forward.
+
 ```{r}
 # Load in the normalized and filtered data from assignment 1
 finalFilteredData <- "final_filtered_exp_data.rds"
@@ -99,7 +98,8 @@ suppressPackageStartupMessages({
 
 Looking at the MDS plot from Assignment 1 there is clustering among samples of the same disease cohort so disease status appears to be an important factor in our model.
 
-Let's create the differential expression model.
+Let's create the model to be used to calculate differential expression and calculate differential expression.
+
 ```{r}
 # First, we need to extract the cohort and sample number from the expData
 cohorts <- gsub("[0-9]", "", colnames(expData)[3:66])
@@ -107,26 +107,8 @@ sampleNum <- gsub("[A-Z]", "", colnames(expData)[3:66])
 samples <- data.frame(cohorts, sampleNum)
 rownames(samples) <- colnames(expData)[3:66]
 
-# maybe remove MDS plot
-# Let's look at the MDS plot
-limma::plotMDS(expData[, 3:66],
-               col = c("darkgreen", "blue", "purple")[factor(samples$cohorts)],
-               main = "MDS Plot Colored by Cohort"
-               )
-legend("bottomleft",
-       legend = levels(factor(samples$cohorts)),
-       pch = c(1),
-       col = c("darkgreen","blue", "purple"),
-       title = "Cohort",
-       cex = 0.75)
-                         
-```
-
-
-```{r}
 # Second, create a linear model
 modelDesign <- model.matrix(~samples$cohorts)
-knitr::kable(head(modelDesign), type="html") # probably don't need to display
 
 # Third, create our data matrix
 expMatrix <- as.matrix(expData[, 3:66])
@@ -142,72 +124,76 @@ fit <- limma::lmFit(minSet, modelDesign)
 bayes <- limma::eBayes(fit, trend = TRUE)
 ```
 
-Let's get the top hits
+Now that the differential expression has been calculated we can look at the top hits.  We will use Benjamini-Hochberg correction to correct for multiple hypothesis testing.
+
 ```{r}
 topFit <- limma::topTable(bayes,
                          coef = ncol(modelDesign),
                          adjust.method = "BH",
                          number = nrow(expMatrix)) # Use BH to adjust 
+
 # assign HGNC symfols to the topFit table
 outputHits <- merge(expData[, c("Gene", "hgnc_symbol")],
                     topFit,
                     by.y=0, by.x=1,
                     all.y=TRUE)
+
 # sort hits in increasing p values
 outputHits <- outputHits[order(outputHits$P.Value),]
 head(outputHits)
-# knitr::kable(outputHits[1:10, 2:8], type="html", row.names=FALSE) # look at top 10 hits
 ```
-Let's see how many genes are significantly expressed
+
+Table 1: Top hits from calculating differential expression
+
+Let's see how many genes are significantly expressed.
 ```{r}
 length(which(outputHits$P.Value < 0.05))
 ```
 There are 6179 genes that are significantly expressed.
 
-The thresholds chosen were 0.05 for the p-value as that is usually a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.  
+The thresholds chosen were 0.05 for the p-value as that is a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.  
 
-Let's see the amount that are after correction
+Let's see the number of genes that are significantly expressed after correction.
+
 ```{r}
 length(which(outputHits$adj.P.Val < 0.05))
 ```
 
-There is still a fair amount of genes differentially expressed pass correction at 5236 out of 12381 genes total.  The thresholds chosen were 0.05 for the p-value as that is usually a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.
+There is still a fair amount of genes differentially expressed pass correction at 5236 out of 12381 genes total.  The thresholds chosen were 0.05 for the p-value as that is a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.
 
-This makes me think the authors have potentially done some filtering of the data as their data analysis procedure is not well documented since I would have expected a lesser number of genes to be significantly differentially expressed both before and after correction.
+This makes me think the authors have potentially done some filtering of the data as their data analysis procedure is not well documented and I would have expected a lower number of genes to be significantly differentially expressed both before and after correction.
 
 ## Volcano plot
-```{r, fig.cap="Figure X: Volcano plots of differentially expressed genes"}
+
+Let's visualize the differentially expressed genes with a volcano plot.  The below shows those that are statistically significant before correction and a threshold of 0.05.
+
+```{r, fig.cap="Figure 1: Volcano plots of significant differentially expressed genes"}
 plot(outputHits$logFC, -log10(outputHits$P.Value), pch = 20,
      main = "Volcano plot of differential expression in DCM, ICM, and NF",
      xlim = c(-10, 10),
      xlab = "logFC",
      ylab = "-log10(P-value)")
 
-# color points based on if they're upregulated, down regulated or neither
-# upregulated is red
-upregulated <- outputHits[which(outputHits$P.Value < 0.05 & outputHits$logFC > 0), ]
+# color points based on if they're up-regulated, down-regulated or neither
+# up-regulated is red
+upregulated <- outputHits[which(outputHits$P.Value < 0.05 & 
+                                  outputHits$logFC > 0), ]
 with(upregulated, points(logFC, -log10(P.Value), pch = 20, col = "red"))
 
-# make downregulated points blue
-downregulated <- outputHits[which(outputHits$P.Value < 0.05 & outputHits$logFC < 0), ]
+# make down-regulated points blue
+downregulated <- outputHits[which(outputHits$P.Value < 0.05 & 
+                                    outputHits$logFC < 0), ]
 with(downregulated, points(logFC -log10(P.Value), pch = 20, col = "blue"))
 
 legend("topright",
        legend = c("up-regulated", "down-regulated", "neither"), 
        fill = c("red","blue", "black"),
        cex = 1)
-
-
-# ggplot2::ggplot(outputHits, x=logFC, y=P.Value) +
-#   ggplot2::geom_point(aes(x=logFC, y=P.Value)) +
-#   ggplot2::xlim(-10, 10)
-ggplot2::ggplot(outputHits, x=logFC, y=-log10(P.Value)) +
-  ggplot2::geom_point(aes(x=logFC, y=-log10(P.Value))) +
-  ggplot2::xlim(-10, 10)
-
 ```
-Volcano plot for statistically significant differentially expressed genes past correction.
-```{r}
+
+Next, let's see the volcano plot for statistically significant differentially expressed genes past correction using a threshold of 0.05.
+
+```{r, fig.cap="Figure 2: Volcano plots of significant differentially expressed genes past correction"}
 plot(outputHits$logFC, -log10(outputHits$adj.P.Val), pch = 20,
      main = "Volcano plot of differential expression in DCM, ICM, and NF",
      xlim = c(-10, 10),
@@ -215,12 +201,14 @@ plot(outputHits$logFC, -log10(outputHits$adj.P.Val), pch = 20,
      ylab = "-log10(adjusted P-value)")
 
 # color points based on if they're upregulated, down regulated or neither
-# upregulated is red
-upregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & outputHits$logFC > 0), ]
+# up-regulated is red
+upregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & 
+                                  outputHits$logFC > 0), ]
 with(upregulated, points(logFC, -log10(adj.P.Val), pch = 20, col = "red"))
 
-# make downregulated points blue
-downregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & outputHits$logFC < 0), ]
+# make down-regulated points blue
+downregulated <- outputHits[which(outputHits$adj.P.Val < 0.05 & 
+                                    outputHits$logFC < 0), ]
 with(downregulated, points(logFC -log10(adj.P.Val), pch = 20, col = "blue"))
 
 legend("topright",
@@ -228,9 +216,16 @@ legend("topright",
        fill = c("red","blue", "black"),
        cex = 1)
 ```
+
+It is interesting to see in both volcano plots there do not seem to be many genes that are down-regulated.  
+
 ## Heatmap
+
 Let's make a heatmap with the statistically significant genes both before and after correction.
-```{r}
+
+Firstly, looking at the differentially expressed genes before correction.
+
+```{r, fig.cap="Figure 3: Heatmap of significant differentially expressed genes"}
 # Get genes which show significant differential expression
 sigGenes <- outputHits$Gene[which(outputHits$P.Value < 0.05)]
 sigExp <- expData[which(expData$Gene %in% sigGenes), ]
@@ -268,9 +263,11 @@ heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrix),
                                    row_title = "Genes")
 heatmap
 ```
-After correction:
-```{r}
-# Get genes which show significant differential expression
+
+Secondly, let's examine the heatmap of differentially expressed genes after multiple hypothesis testing correction:
+
+```{r, fig.cap="Figure 4: Heatmap of significant differentially expressed genes past correction"}
+# Get genes which show significant differential expression after correction
 sigGenesAfterCorrection <- outputHits$Gene[which(outputHits$adj.P.Val < 0.05)]
 sigExpAfterCorrection <- expData[which(expData$Gene %in% sigGenesAfterCorrection), ]
 sigAfterCorrectionGeneNames <- sigExpAfterCorrection$Gene
@@ -297,7 +294,7 @@ heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrixAfterCorrection),
                                    show_column_names = TRUE,
                                    show_row_names = FALSE, 
                                    show_heatmap_legend = TRUE,
-                                   column_order = 
+                                   column_order =
                                      stringr::str_sort(colnames(heatmapMatrixAfterCorrection),
                                                        numeric = TRUE),
                                    column_names_gp = gpar(fontsize = 7),
@@ -308,15 +305,18 @@ heatmap <- ComplexHeatmap::Heatmap(as.matrix(heatmapMatrixAfterCorrection),
 heatmap
 ```
 
-Both before and after correction they look almost identical.
+The heatmaps for before and after correction look almost identical.  These heatmaps are also consistent with what the authors saw.  NF is clearly separated from DCM and ICM and NF samples clusters nicely together and do not cluster with ICM or DCM.  ICM and DCM do not cluster with samples of the same cohort as nicely but there is still some level of clustering within each cohort.  
+
+Additionally, ICM's seems to cluster within its cohort nicer than DCM but not as nicely as NF.  It also seems like it has the opposite expression of genes compared to NF.  That is genes down-regulated in NF seem to be up-regulated in ICM and vice versa.  DCM and ICM also share similar expression patterns but there seems to be a stronger signal in ICM.  Note there are also a lot more DCM samples (37) than ICM (13) and NF (14).
 
 # Threshold over-representation analysis
 
-Since the heatmap and the number of genes past multiple hypothesis correction are similar to the heatmap and amount of genes before multiple hypothesis testing I will use the genes shown to be statistically significant before multiple hypothesis testing to keep more results.
+Since the heatmap and the number of genes past multiple hypothesis correction are similar to the heatmap and amount of genes before multiple hypothesis testing I will use the genes shown to be statistically significant before multiple hypothesis testing to keep more results.  Additionally, in the ORA a correction method can be chosen and used.
 
 With the significantly up-regulated and down-regulated genes let's run a threshold gene set enrichment analysis.  G:Profiler will be used.
 
 First let's divide the genes into up and down-regulated.
+
 ```{r}
 # First divide the genes into up-regulated and down-regulated
 sigExp <- outputHits[which(outputHits$P.Value < 0.05), ]
@@ -324,7 +324,8 @@ upRegulatedGenes <- sigExp[which(sigExp$logFC > 0), ]
 downRegulatedGenes <- sigExp[which(sigExp$logFC < 0), ]
 ```
 
-Next, we will use G:Profiler
+Next, we will use G:Profiler's R package to perform the analysis.
+
 ```{r}
 # Let's examine the version of annotation data used in G:Profiler
 versionInfo <- gprofiler2::get_version_info(organism = "hsapiens")
@@ -343,7 +344,10 @@ row.names(versionDF) <- 1:4
 head(versionDF)
 ```
 
-Let's now begin the ORA
+Table 2: Versions of annotation sources used in G:Profiler
+
+Let's now begin the ORA.
+
 ```{r}
 # ORA for all significantly differentially expressed genes 
 gostAll <- gprofiler2::gost(query = sigExp$Gene, 
@@ -369,21 +373,38 @@ gostDown <- gprofiler2::gost(query = downRegulatedGenes$Gene,
 ```
 
 Let's see how many genesets were returned with the threshold 0.05 and what the top results are.
+
+Looking at all genes:
+
 ```{r}
 # Both up-regulated and down-regulated (all genes)
 nrow(gostAll$result)
 head(gostAll$result[order(gostAll$result$p_value, decreasing = FALSE),])
+```
 
+Table 3: Top geneset results from G:Profiler run on all genes
+
+Up-regulated genes:
+
+```{r}
 # Just up-regulated
 nrow(gostUp$result)
 head(gostUp$result[order(gostUp$result$p_value, decreasing = FALSE),])
+```
 
+Table 4: Top geneset results from G:Profiler run on up-regulated genes
+
+Down-regulated genes:
+
+```{r}
 # Just down-regulated
 nrow(gostDown$result)
 head(gostDown$result[order(gostDown$result$p_value, decreasing = FALSE),])
 ```
 
-From this we see there are over 10000 genesets returned in each ORA and the top terms returned are very general such as metabolic process.  To combat this we will filter the results to get more specific results.
+Table 5: Top geneset results from G:Profiler run on down-regulated genes
+
+From this we see there are over 10000 genesets returned in each ORA and the top terms returned are very general such as metabolic process, cellular metabolic process, and catabolic process in all genes, up-regulated genes, and down-regulated genes respectively.  To combat this we will filter the results to get more specific results.  We will filter to only include results with term size between 1 and 200 inclusive.
 
 ```{r}
 # Filter the results to only those with term size between 1 and 200 inclusive
@@ -394,6 +415,9 @@ nrow(gostAll$result) - nrow(gostAllFilteredResults) # how many results removed
 
 head(gostAllFilteredResults[order(gostAllFilteredResults$p_value, decreasing = FALSE),])
 ```
+
+Table 6: Top geneset results from G:Profiler run on all genes after filtering for term size
+
 We now see the results are more specific with the top term being mRNA splicing and 937 terms were removed leaving 12658 for ORA done on both up and down-regulated genes.
 
 ```{r}
@@ -405,6 +429,8 @@ nrow(gostUp$result) - nrow(gostUpFilteredResults) # how many results removed
 
 head(gostUpFilteredResults[order(gostUpFilteredResults$p_value, decreasing = FALSE),])
 ```
+
+Table 7: Top geneset results from G:Profiler run on up-regulated genes after filtering for term size
 
 For up-regulated genes 937 terms were removed leaving 10245 terms and the top one being mitochondrial gene expression.
 
@@ -418,26 +444,27 @@ nrow(gostDown$result) - nrow(gostDownFilteredResults) # how many results removed
 head(gostDownFilteredResults[order(gostDownFilteredResults$p_value, decreasing = FALSE),])
 ```
 
+Table 8: Top geneset results from G:Profiler run on down-regulated genes after filtering for term size
+
 There were 936 terms removed leaving 10438 in down-regulated genes and the top term is now diseases associated with glycosaminoglycan metabolism.
 
 Let's visualize the results with Manhattan plots.  Note the terms above the line are considered significant after correction.
-```{r, fig.cap="Figure X: Manhattan Plot of ORA results for all differentially expressed genes"}
+
+```{r, fig.cap="Figure 5: Manhattan Plot of ORA results for all differentially expressed genes"}
 gprofiler2::gostplot(gostAll)
 ```
 
-```{r, fig.cap="Figure X: Manhattan Plot of ORA results for up-regulated genes"}
+```{r, fig.cap="Figure 6: Manhattan Plot of ORA results for up-regulated genes"}
 gprofiler2::gostplot(gostUp)
 ```
 
-```{r, fig.cap="Figure X: Manhattan Plot of ORA results for down-regulated genes"}
+```{r, fig.cap="Figure 7: Manhattan Plot of ORA results for down-regulated genes"}
 gprofiler2::gostplot(gostDown)
 ```
 
-# Interpretation and discussion questions
-
-1. Do the over-representation results support conclusions or mechanism discussed in the original paper?
-
 Let's see the top result for all genes, up-regulated, and down-regulated based on the annotation source used.
+
+First, let's look at all the genes:
 
 ```{r}
 # All genes
@@ -452,7 +479,13 @@ allTopResults <- rbind(allTopResults,
 row.names(allTopResults) <- c(1:4)
 allTopResults <- subset(allTopResults, select = c(9:11))
 allTopResults
+```
 
+Table 9: Top geneset results based on annotation source used for all differentially expressed genes
+
+Next, the up-regulated genes:
+
+```{r}
 # Up-regulated genes
 # Get top result by annotation source used
 upTopResults <- gostUpFilteredResults[which(gostUpFilteredResults$source == "GO:BP"), ][1, ]
@@ -465,8 +498,13 @@ upTopResults <- rbind(upTopResults,
 row.names(upTopResults) <- c(1:4)
 upTopResults <- subset(upTopResults, select = c(9:11))
 upTopResults
+```
 
-# Up-regulated genes
+Table 10: Top geneset results based on annotation source used for up-regulated differentially expressed genes
+
+Lastly, examine the down-regulated genes' result:
+```{r}
+# Down-regulated genes
 # Get top result by annotation source used
 downTopResults <- gostDownFilteredResults[which(gostDownFilteredResults$source == "GO:BP"), ][1, ]
 downTopResults <- rbind(downTopResults,
@@ -479,34 +517,95 @@ row.names(downTopResults) <- c(1:4)
 downTopResults <- subset(downTopResults, select = c(9:11))
 downTopResults
 ```
-2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your results.
 
-https://bmccardiovascdisord.biomedcentral.com/articles/10.1186/s12872-020-01596-w
-https://www.nature.com/articles/s41598-022-26277-w#Sec12
+Table 11: Top geneset results based on annotation source used for down-regulated differentially expressed genes
+
+# Interpretation and discussion questions
 
 ## Differential Gene Expression
-1. Calculate p-values for each of the genes in your expression set. How many genes were significantly differentially expressed? What thresholds did you use and why?
-2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?
-3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.
-4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.
+
+**1. Calculate p-values for each of the genes in your expression set. How many genes were significantly differentially expressed? What thresholds did you use and why?**
+
+There were 6179 genes out of 12381 genes total that were significantly differentially expressed.  The thresholds used were 0.05, because this is a standard value that is used and with this threshold there are a fair amount of results, about half of the total genes are shown to be statistically significantly differentially expressed.  Since there was about half of the genes shown to be significantly differentially expressed I didn't feel the need to make the threshold less stringent by increasing the threshold to get more genes.  The threshold was not made more stringent to allow analysis with a larger number of genes since a more stringent thresholds means less genes would be considered significant.  This may result in fewer significant pathways being found downstream.
+
+**2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?**
+
+The multiple hypothesis correction method used was Benjamini-Hochberg.  This method was chosen, because it helps control for false discovery rate.  The authors of the original paper used this method as well and it is less stringent than other methods like Bonferonni.  
+
+**3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.**
+
+Please see Figures 1 and 2 located in the `Volcano plot` section.  They are the volcano plots for significantly differentially expressed genes before and after p-value correction.  It is interesting to see there are not as many down-regulated genes compared to up-regulated genes in this volcano plot.
+
+**4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.**
+
+Please see Figure 3 and Figure 4 located in the `Heatmap` section.  They are the heatmaps for significantly differentially expressed genes before and after p-value correction.  The heatmaps generated using genes significant before and after correction look almost identical.  The NF samples cluster with each other quite nicely and show a distinct difference from DCM and ICM.  ICM also shows some clustering although it is not as distinct as in NF.  There is some clustering within DCM but it is not as prominent as it is in NF or ICM.
+
+ICM seems to have the opposite expression of genes compared to NF where down-regulated in NF seem to be up-regulated in ICM and vice versa.  DCM has a similar pattern to ICM so shows this as well but the signal is weaker.
+
+There are almost three times more samples in DCM than ICM and NF.  There are 37 DCM samples, 13 ICM samples, and 14 NF samples.  I suspect this is why there is a weaker signal and more variability within the DCM cohort when examining these heatmaps.
 
 ## Threshold over-representation analysis
-1. Which method did you choose and why?
-2. What annotation data did you use and why? What version of the annotation are you using?
-3. How many genesets were returned with what thresholds?
-4. Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?
 
-The link to the corresponding journal entry can be found here...
+**1. Which method did you choose and why?**
+
+I chose to use `gprofiler2` which is `G:Profiler`'s R package for the ORA, because I found it `G:Profiler` convenient and easy to use while completing the journal assignment.  In addition, they update they annotation data regularly which is a very big advantage since it ensures the data we are using is up-to-date and we won't be missing anything due to having older data.  I also liked how there was a nice visual output and you can compare your gene list to multiple databases at once time.  There were also a lot of parameters you can play with such as significance thresholds, term sizes, and correction method used.
+
+**2. What annotation data did you use and why? What version of the annotation are you using?**
+
+The annotation data used were GO: Biological Process, KEGG, Reactome, and Wiki Pathways.  Their versions are from December 4, 2022, December 26, 2022, December 28, 2022, and Decmber 10, 2022 respectively.  More detailed information can be found in Table X under the `Threshold over-representation analysis` section. 
+
+I chose to use this annotation data, because I believe it would be able to capture the enrichment in a variety of biological pathways for which I am interested in analyzing.
+
+**3. How many genesets were returned with what thresholds?**
+
+Using the threshold of 0.05 and there were 13595, 11182, 11374 genesets for all the differentially expressed genes, up-regulated genes, and down-regulated genes respectively.  
+
+When the filter for term size being between 1 and 200 inclusive was applied with a threshold of 0.05 there were 12658, 10245, and 10438 genesets returned for all the differentially expressed genes, up-regulated genes, and down-regulated genes respectively.
+
+In all the genes it removed 937 genesets, in up-regulated genes it removed 937 genesets, and in down-regulated genes it removed 936 genesets.
+
+**4. Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?**
+
+Prior to the filter for term size being applied the top result was metabolic process for all genes, cellular metabolic process for up-regulated genes, and catabolic process for down-regulated genes.  These three terms are still very general and it makes sense that the top result would be very general since GO is a hierarchy so more general terms have more annotations. 
+
+After filtering to smaller term sizes for more specific results the top results returned from GO: Biological Process, KEGG, Reactome, ad Wikipathways respectively for all genes were cellular respiration, oxidative phosphorylation, mRNA Splicing, and Electron transport chain: OXPHOS system in mitochondria.
+
+Following the same order for annotation sources in up-regualted genes the results were mitochondrial gene expression, ribosome, mitochondrial translation initation, and EGF/EGFR signalling pathway.
+
+In down-regulated genes it was ribonuceloprotein complex assembly, oxidative phosphorylation, diseases associated with glycosaminoglycan metabolism, Electron transport chain: OXPHOS system in mitochondria.
+
+The results for up and down-regulated genes are more specific than for all genes.  They all seem to be involved in the mitochondria relating to metabolism and gene expression.
+
+## Interpretation
+
+**1. Do the over-representation results support conclusions or mechanism discussed in the original paper?**
+
+Yes, the over-representation analysis results support the conclusions or mechanisms discussed in the original paper.  The paper found the four most significant pathways are Mitochondrial Dysfunction, Oxidative Phosphorylation, EIF2 Signaling, and Protein Ubiquitination Pathway [@HeartPaper1].  This is consistent with the findings that most of the pathways are related to metabolism, gene expression, and are in the mitochondria.  
+
+Overall, this supports metabolic pathway dysfunction in failing hearts.
+
+**2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your results.**
+
+Yes, in a study identifying candidate genes in ICM they found that some of the top significantly enriched pathways related to gene expression such as post-translational modification and were involved in the mitochondira.  They authors also used the data set presented here to validate their results for some of the differentially expressed genes and they were consistent with their findings [@ICMPaper].
+
+There was also a publication detailing ten genes that have most commonly been implicated in DCM most of which are involved in gene expression such as in the transcription and translation process.  This publication also mentions there is an extensive range of cardiomyopathies associated with mitochondrial disorders both of which support the findings here and in the original paper [@NaturePaper].
+
+## Journal Entry Link
+
+The link to the corresponding journal entry can be found [here](https://github.com/bcb420-2023/Angela_Ng/wiki/Assignment-%232:-Differential-Gene-Expression-and-Preliminary-ORA).
 
 # Appendix
 
 Here I decided to regenerate the density plot for the data.  In Assignment 1 it was noted that the data has been filtered to remove genes whose mean RPKM across all samples was less than 5, as the authors did in their paper.  This is to remove some noise.  
 
-Note, in Assignment 1 the density plots before filtering also looked strange as a lot of the density was at 0 with a very long tail.  This is an indication that I was applying a log to a log since in that original plot I did log2(RPKM + 1).  The reason I decided to plot log2(RPKM + 1) was because in the paper the authors did not mention any other methods applied to the data other than normalizing it with RPKM.  The authors must have done something else to their data other than applying RPKM that they did not document.
+Note, in Assignment 1 the density plots before filtering also looked strange as a lot of the density was at 0 with a very long tail.  This is an indication that I was applying a log to a log since in that original plot I did log2(RPKM + 1).  The reason I decided to plot log2(RPKM + 1) was because in the paper the authors did not mention any other methods applied to the data other than normalizing it with RPKM.  After looking at the density and boxplots and trying TMM normalization in Assignment 1 it has been concluded that the authors must have done something else to their data other than applying RPKM that they did not document.
 
 I have decided to redo the density plots without using log2 and with the data filtered to only include genes who have mean RPKM greater than 5 across all samples.
-```{r}
+
+Density plot for NF:
+```{r, fig.cap="Figure 8: Density plot for NF"}
 filteredExpData <- dplyr::select(expData, -c(2, 67, 68, 69, 70, -71)) 
+# Pivot data so columns are gene names, sample, and rpkm 
 pivotedData <- tidyr::pivot_longer(filteredExpData, cols = !Gene, names_to = "sample", values_to = "rpkm")
 
 pivotedData$cohort <- gsub("[0-9]", "", pivotedData$sample)
@@ -522,7 +621,11 @@ nfDensityPlot <- ggplot2::ggplot(nfSamples, aes(x=rpkm, color=sample)) +
                 y = "Smoothing density of RPKM",
                 color = "Sample")
 nfDensityPlot
+```
 
+Density plot for DCM:
+
+```{r, fig.cap="Figure 9: Density plot for DCM"}
 dcmDensityPlot <- ggplot2::ggplot(dcmSamples, aes(x=rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
   scale_x_continuous(limits = c(-2, 12)) +
@@ -531,7 +634,9 @@ dcmDensityPlot <- ggplot2::ggplot(dcmSamples, aes(x=rpkm, color=sample)) +
                 y = "Smoothing density of RPKM",
                 color = "Sample")
 dcmDensityPlot
+```
 
+```{r, fig.cap="Figure 10: Density plot for ICM"}
 icmDensityPlot <- ggplot2::ggplot(icmSamples, aes(x=rpkm, color=sample)) +
   ggplot2::geom_density(key_glyph = draw_key_smooth) + 
   scale_x_continuous(limits = c(-2, 12)) +
@@ -541,10 +646,11 @@ icmDensityPlot <- ggplot2::ggplot(icmSamples, aes(x=rpkm, color=sample)) +
                 color = "Sample")
 icmDensityPlot
 ```
-Figure: X, updated density plot
 
-Although the data does not look perfect this looks better than the previous density plot from pre-filtering for mean RPKM less than 5 and plotting log2(RPKM + 1).  In the later it appeared all the density was near zero and there was a long tail.
+Although the data does not look perfect this looks better than the previous density plot from pre-filtering away genes with mean RPKM less than 5 and plotting log2(RPKM + 1).  In the later it appeared all the density was near zero and there was a long tail.
 
-For brevity the code and post normalized plot has not been included in this report as it is not the main focus of this assignment.  Assignment 1 showing the previous pre-normalization and post normalization plots can be found at: https://github.com/bcb420-2023/Angela_Ng/blob/main/A1/A1_data_set_selection_initial_processing.html.
+The data has been filtered so genes with mean expression across all samples greater than or equal to five is kept so it is possible some genes have zero expression in some samples and relatively more expression in others and still have a mean RPKM greater than or equal to 5.  This is why it is possible for there to be genes with RPKM of 0.
+
+More information pertaining to how the data was normalized and initially explored can be found in [Assignment 1](https://github.com/bcb420-2023/Angela_Ng/blob/main/A1/A1_data_set_selection_initial_processing.html).
 
 # References
