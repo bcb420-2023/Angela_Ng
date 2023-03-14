@@ -28,11 +28,11 @@ This data set was downloaded from the Gene Expression Omnibus (GEO) and has a GE
 
 In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out to remove some noise.  The normalization method of RPKM was the decision made on the authors' part as the data set from GEO came in RPKM.  Prior to removing lowly expressed genes with mean RPKM less than 5 there were 57974 genes.  After removing these lowly expressed genes 12381 genes remained.
 
-All expression values have been mapped to HUGO symbols.  There were 6 specific genes that were repeated and they have been kept in the final data set.  The reason being at that point it was not possible to tell if they were due to an error such as in measurement or another type of error and those genes could have functions that are important to look at in the future.  The duplicated genes all had frequency of 2 in this data set.
+All expression values have been mapped to HUGO symbols.  There were 6 specific genes that were repeated and they have been kept in the final data set.  The reason being at that point it was not possible to tell if they were due to an error such as in measurement or another type of error and those genes could have functions that are important to look at in the future.  The duplicated genes all had frequency of 2 in this data set.  In this assignment I have decided to remove the duplicates because at this point they do not seem significant.
 
 An important note is the normalization and data processing methods were not clearly described by the authors in their original paper.  The data provided was in RPKM meaning it has been normalized by library size and the length of transcript allowing within sample comparisons.  
 
-In Assignment 1, I attempted to perform TMM normalization to see if the authors performed any normalization between samples.  The hypothesis was if the data has been normalized between samples as well then the plots before TMM normalization and after TMM normalization it should be the same.  The result after TMM normalization was in the density plot there was a large spike at 0 essentially making all the data at one point.  This density plot does not make sense.  Furthermore, this is a drastic change to the original data and is undesired.  The conclusion from this initial exploration was the data was posted already normalized so further normalization methods should not be used.
+In Assignment 1, I attempted to perform TMM normalization to see if the authors performed any normalization between samples.  The hypothesis was if the data has been normalized between samples as well then the plots before TMM normalization and after TMM normalization should be the same.  The result after TMM normalization was in the density plot there was a large spike at 0 essentially making all the data at one point.  This density plot does not make sense.  Furthermore, this is a drastic change to the original data and is undesired.  
 
 Due to the results seen from the plots after normalization and lack of information in the paper about normalization methods used other than RPKM, it is concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable.  More detail about this can be found in the appendix.
 
@@ -117,10 +117,10 @@ colnames(expMatrix) <- colnames(expData[3:66])
 
 minSet <- Biobase::ExpressionSet(assayData = expMatrix)
 
-# Third, fit the data to our model
+# Fourth, fit the data to our model
 fit <- limma::lmFit(minSet, modelDesign)
 
-# Apply empirical Bayes to compute differential expression for the above model
+# Fifth, apply empirical Bayes to compute differential expression for the above model
 bayes <- limma::eBayes(fit, trend = TRUE)
 ```
 
@@ -130,9 +130,9 @@ Now that the differential expression has been calculated we can look at the top 
 topFit <- limma::topTable(bayes,
                          coef = ncol(modelDesign),
                          adjust.method = "BH",
-                         number = nrow(expMatrix)) # Use BH to adjust 
+                         number = nrow(expMatrix)) # Use BH to correct 
 
-# assign HGNC symfols to the topFit table
+# assign HGNC symbols to the topFit table
 outputHits <- merge(expData[, c("Gene", "hgnc_symbol")],
                     topFit,
                     by.y=0, by.x=1,
@@ -146,9 +146,11 @@ head(outputHits)
 Table 1: Top hits from calculating differential expression
 
 Let's see how many genes are significantly expressed.
+
 ```{r}
 length(which(outputHits$P.Value < 0.05))
 ```
+
 There are 6179 genes that are significantly expressed.
 
 The thresholds chosen were 0.05 for the p-value as that is a standard value.  Additionally, there are a fair amount of results, about half of the total genes, so the p-value threshold doesn't need to be increased to be made less stringent.  
@@ -165,7 +167,7 @@ This makes me think the authors have potentially done some filtering of the data
 
 ## Volcano plot
 
-Let's visualize the differentially expressed genes with a volcano plot.  The below shows those that are statistically significant before correction and a threshold of 0.05.
+Let's visualize the differentially expressed genes with a volcano plot.  The below shows those that are statistically significant before correction using a threshold of 0.05.
 
 ```{r, fig.cap="Figure 1: Volcano plots of significant differentially expressed genes"}
 plot(outputHits$logFC, -log10(outputHits$P.Value), pch = 20,
@@ -307,13 +309,13 @@ heatmap
 
 The heatmaps for before and after correction look almost identical.  These heatmaps are also consistent with what the authors saw.  NF is clearly separated from DCM and ICM and NF samples clusters nicely together and do not cluster with ICM or DCM.  ICM and DCM do not cluster with samples of the same cohort as nicely but there is still some level of clustering within each cohort.  
 
-Additionally, ICM's seems to cluster within its cohort nicer than DCM but not as nicely as NF.  It also seems like it has the opposite expression of genes compared to NF.  That is genes down-regulated in NF seem to be up-regulated in ICM and vice versa.  DCM and ICM also share similar expression patterns but there seems to be a stronger signal in ICM.  Note there are also a lot more DCM samples (37) than ICM (13) and NF (14).
+Additionally, ICM's seems to cluster within its cohort nicer than DCM but not as nicely as NF.  It also appears that it has the opposite expression of genes compared to NF.  That is genes down-regulated in NF seem to be up-regulated in ICM and vice versa.  DCM and ICM share similar expression patterns but there is a stronger signal in ICM.  Note there are a lot more DCM samples (37) than ICM (13) and NF (14).
 
 # Threshold over-representation analysis
 
-Since the heatmap and the number of genes past multiple hypothesis correction are similar to the heatmap and amount of genes before multiple hypothesis testing I will use the genes shown to be statistically significant before multiple hypothesis testing to keep more results.  Additionally, in the ORA a correction method can be chosen and used.
+Since the heatmap and the number of genes past multiple hypothesis correction are similar to the heatmap and amount of genes before multiple hypothesis testing I will use the genes shown to be statistically significant before multiple hypothesis testing to keep more results.  Additionally, in the ORA a multiple hypothesis correction method can be chosen and used.
 
-With the significantly up-regulated and down-regulated genes let's run a threshold gene set enrichment analysis.  G:Profiler will be used.
+With the significantly up-regulated and down-regulated genes let's run a threshold gene set enrichment analysis.  `gprofiler2`, the R package from `G:Profiler` will be used.
 
 First let's divide the genes into up and down-regulated.
 
@@ -324,7 +326,7 @@ upRegulatedGenes <- sigExp[which(sigExp$logFC > 0), ]
 downRegulatedGenes <- sigExp[which(sigExp$logFC < 0), ]
 ```
 
-Next, we will use G:Profiler's R package to perform the analysis.
+Next, we will use `G:Profiler`'s R package to perform the analysis.
 
 ```{r}
 # Let's examine the version of annotation data used in G:Profiler
@@ -520,6 +522,8 @@ downTopResults
 
 Table 11: Top geneset results based on annotation source used for down-regulated differentially expressed genes
 
+It seems there is a pattern of terms related to the mitochondria, metabolism, transcription, and translation.
+
 # Interpretation and discussion questions
 
 ## Differential Gene Expression
@@ -530,11 +534,11 @@ There were 6179 genes out of 12381 genes total that were significantly different
 
 **2. Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?**
 
-The multiple hypothesis correction method used was Benjamini-Hochberg.  This method was chosen, because it helps control for false discovery rate.  The authors of the original paper used this method as well and it is less stringent than other methods like Bonferonni.  
+The multiple hypothesis correction method used was Benjamini-Hochberg.  This method was chosen, because it helps control for false discovery rate.  The authors of the original paper used this method as well and it is less stringent than other methods like Bonferonni. 5236 genes passed correction out of a total of 12381 genes.
 
 **3. Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.**
 
-Please see Figures 1 and 2 located in the `Volcano plot` section.  They are the volcano plots for significantly differentially expressed genes before and after p-value correction.  It is interesting to see there are not as many down-regulated genes compared to up-regulated genes in this volcano plot.
+Please see Figures 1 and 2 located in the `Volcano plot` section.  They are the volcano plots for significantly differentially expressed genes before and after p-value correction.  It is interesting to see there are not as many down-regulated genes compared to up-regulated genes in these volcano plot.
 
 **4. Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.**
 
@@ -548,11 +552,11 @@ There are almost three times more samples in DCM than ICM and NF.  There are 37 
 
 **1. Which method did you choose and why?**
 
-I chose to use `gprofiler2` which is `G:Profiler`'s R package for the ORA, because I found it `G:Profiler` convenient and easy to use while completing the journal assignment.  In addition, they update they annotation data regularly which is a very big advantage since it ensures the data we are using is up-to-date and we won't be missing anything due to having older data.  I also liked how there was a nice visual output and you can compare your gene list to multiple databases at once time.  There were also a lot of parameters you can play with such as significance thresholds, term sizes, and correction method used.
+I chose to use `gprofiler2` which is `G:Profiler`'s R package for the ORA, because I found `G:Profiler` convenient and easy to use while completing the journal assignment.  In addition, they update they annotation data regularly which is a very big advantage since it ensures the data we are using is up-to-date and we won't be missing anything due to having older data.  I also liked how there was a nice visual output and you can compare your gene list to multiple databases at once time.  Another benefit was there are a lot of parameters you can play with such as significance thresholds, term sizes, and correction method used.
 
 **2. What annotation data did you use and why? What version of the annotation are you using?**
 
-The annotation data used were GO: Biological Process, KEGG, Reactome, and Wiki Pathways.  Their versions are from December 4, 2022, December 26, 2022, December 28, 2022, and Decmber 10, 2022 respectively.  More detailed information can be found in Table X under the `Threshold over-representation analysis` section. 
+The annotation data used were GO: Biological Process, KEGG, Reactome, and Wiki Pathways.  Their versions are from December 4, 2022, December 26, 2022, December 28, 2022, and Decmber 10, 2022 respectively.  More detailed information can be found in Table 2 under the `Threshold over-representation analysis` section. 
 
 I chose to use this annotation data, because I believe it would be able to capture the enrichment in a variety of biological pathways for which I am interested in analyzing.
 
@@ -560,7 +564,7 @@ I chose to use this annotation data, because I believe it would be able to captu
 
 Using the threshold of 0.05 and there were 13595, 11182, 11374 genesets for all the differentially expressed genes, up-regulated genes, and down-regulated genes respectively.  
 
-When the filter for term size being between 1 and 200 inclusive was applied with a threshold of 0.05 there were 12658, 10245, and 10438 genesets returned for all the differentially expressed genes, up-regulated genes, and down-regulated genes respectively.
+When the filter for term size being between 1 and 200 inclusive was applied with a threshold of 0.05, there were 12658, 10245, and 10438 genesets returned for all the differentially expressed genes, up-regulated genes, and down-regulated genes respectively.
 
 In all the genes it removed 937 genesets, in up-regulated genes it removed 937 genesets, and in down-regulated genes it removed 936 genesets.
 
@@ -568,13 +572,13 @@ In all the genes it removed 937 genesets, in up-regulated genes it removed 937 g
 
 Prior to the filter for term size being applied the top result was metabolic process for all genes, cellular metabolic process for up-regulated genes, and catabolic process for down-regulated genes.  These three terms are still very general and it makes sense that the top result would be very general since GO is a hierarchy so more general terms have more annotations. 
 
-After filtering to smaller term sizes for more specific results the top results returned from GO: Biological Process, KEGG, Reactome, ad Wikipathways respectively for all genes were cellular respiration, oxidative phosphorylation, mRNA Splicing, and Electron transport chain: OXPHOS system in mitochondria.
+After filtering to smaller term sizes for more specific results, the top results returned from GO: Biological Process, KEGG, Reactome, and Wikipathways respectively for all genes were cellular respiration, oxidative phosphorylation, mRNA Splicing, and Electron transport chain: OXPHOS system in mitochondria.
 
 Following the same order for annotation sources in up-regualted genes the results were mitochondrial gene expression, ribosome, mitochondrial translation initation, and EGF/EGFR signalling pathway.
 
 In down-regulated genes it was ribonuceloprotein complex assembly, oxidative phosphorylation, diseases associated with glycosaminoglycan metabolism, Electron transport chain: OXPHOS system in mitochondria.
 
-The results for up and down-regulated genes are more specific than for all genes.  They all seem to be involved in the mitochondria relating to metabolism and gene expression.
+The results for up and down-regulated genes are more specific than for all genes.  They all seem to be involved in the mitochondria relating to metabolism and gene expression.  More details can be found in Tables 3-11 in the `Threshold over-representation analysis` section.
 
 ## Interpretation
 
@@ -586,11 +590,11 @@ Overall, this supports metabolic pathway dysfunction in failing hearts.
 
 **2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your results.**
 
-Yes, in a study identifying candidate genes in ICM they found that some of the top significantly enriched pathways related to gene expression such as post-translational modification and were involved in the mitochondira.  They authors also used the data set presented here to validate their results for some of the differentially expressed genes and they were consistent with their findings [@ICMPaper].
+Yes, in a study identifying candidate genes in ICM they found that some of the top significantly enriched pathways were related to gene expression such as post-translational modification and were involved in the mitochondira.  The authors also used the data set presented here to validate their results for some of the differentially expressed genes and found the results in this study were consistent with their findings [@ICMPaper].
 
 There was also a publication detailing ten genes that have most commonly been implicated in DCM most of which are involved in gene expression such as in the transcription and translation process.  This publication also mentions there is an extensive range of cardiomyopathies associated with mitochondrial disorders both of which support the findings here and in the original paper [@NaturePaper].
 
-## Journal Entry Link
+# Journal Entry Link
 
 The link to the corresponding journal entry can be found [here](https://github.com/bcb420-2023/Angela_Ng/wiki/Assignment-%232:-Differential-Gene-Expression-and-Preliminary-ORA).
 
@@ -598,7 +602,7 @@ The link to the corresponding journal entry can be found [here](https://github.c
 
 Here I decided to regenerate the density plot for the data.  In Assignment 1 it was noted that the data has been filtered to remove genes whose mean RPKM across all samples was less than 5, as the authors did in their paper.  This is to remove some noise.  
 
-Note, in Assignment 1 the density plots before filtering also looked strange as a lot of the density was at 0 with a very long tail.  This is an indication that I was applying a log to a log since in that original plot I did log2(RPKM + 1).  The reason I decided to plot log2(RPKM + 1) was because in the paper the authors did not mention any other methods applied to the data other than normalizing it with RPKM.  After looking at the density and boxplots and trying TMM normalization in Assignment 1 it has been concluded that the authors must have done something else to their data other than applying RPKM that they did not document.
+Note, in Assignment 1 the density plots before filtering also looked a bit strange as a lot of the density was at 0 with a very long tail.  This is an indication that I was applying a log to a log since in that original plot I did log2(RPKM + 1).  The reason I decided to plot log2(RPKM + 1) was because in the paper the authors did not mention any other methods applied to the data other than normalizing it with RPKM.  After looking at the density and boxplots and trying TMM normalization in Assignment 1 it has been concluded that the authors must have done something else to their data other than applying RPKM that they did not document.
 
 I have decided to redo the density plots without using log2 and with the data filtered to only include genes who have mean RPKM greater than 5 across all samples.
 
