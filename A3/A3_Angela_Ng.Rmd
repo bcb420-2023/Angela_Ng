@@ -1,12 +1,12 @@
 ---
-title: "BCB420 Assignment 2- Differential Gene expression and Preliminary ORA"
+title: "BCB420 Assignment 3- Data set Pathway and Network Analysis"
 author: "Angela Ng"
 output: 
   html_document:
     toc: true
     toc_depth: 2
     df_print: paged
-bibliography: A2.bib
+bibliography: A3.bib
 nocite: '@*'
 ---
 
@@ -40,18 +40,40 @@ suppressPackageStartupMessages({
 })
 ```
 
+First, let's get the list of genes that were calculated to be differentially expressed in Assignment 2 and get their ranks to make a ranked gene list.
+
 ```{r}
-# load in the output hits data from assignment 2
-outputHitsFileName <- "output_hits.rds"
-outputHits <- readRDS(outputHitsFileName)
+# load in the ranked gene list 
+rankFile <- "ranked_genes.rds"
+if (file.exists(rankFile)) {
+  rankedGenes <- readRDS(rankFile)
+  
+  # filter to only the gene name and rank
+  rankedGenes <- rankedGenes[, c("hgnc_symbol", "rank")]
 
-# calculate the ranks for the differentially expressed genes
-outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
+} else {
+  # if the ranked gene list doesn't exist yet, load in the output hits data from assignment 2
+  outputHitsFileName <- "output_hits.rds"
+  outputHits <- readRDS(outputHitsFileName)
+  
+  # calculate the ranks for the differentially expressed genes
+  outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
+  
+  # order based on decreasing rank
+  outputHits <- outputHits[order(-outputHits$rank), ]
+  
+  # save for future use
+  saveRDS(outputHits, rankFile)
+  
+  # filter to only the gene name and rank
+  rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
+}
 
-# order based on decreasing rank
-outputHits <- outputHits[order(-outputHits$rank), ]
-
-rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
-fpath <- "ranked_genes.rds"
-saveRDS(outputHits, fpath)
+# convert ranked list to tibble
+rankedGenes <- tibble::as_tibble(rankedGenes)
 ```
+
+# Non-thresholded Gene set Enrichment Analysis
+# Visualize Gene set Enrichment Analysis in Cytoscape
+# Interpretation and detailed view of results
+# References
