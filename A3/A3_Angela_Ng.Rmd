@@ -1,0 +1,57 @@
+---
+title: "BCB420 Assignment 2- Differential Gene expression and Preliminary ORA"
+author: "Angela Ng"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    df_print: paged
+bibliography: A2.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+Mention what has been done to the data from Assignment 1 and Assignment 2.  Note the data from Assignment 2 hasn't been ranked yet.
+
+```{r}
+# Install required packages 
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("tibble", quietly = TRUE)) {
+  install.packages("tibble")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+} 
+
+if(!requireNamespace("tidyr", quietly = TRUE)) {
+  install.packages("tidyr")
+}
+
+suppressPackageStartupMessages({
+  library("tibble")
+  library("dplyr")
+})
+```
+
+```{r}
+# load in the output hits data from assignment 2
+outputHitsFileName <- "output_hits.rds"
+outputHits <- readRDS(outputHitsFileName)
+
+# calculate the ranks for the differentially expressed genes
+outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
+
+# order based on decreasing rank
+outputHits <- outputHits[order(-outputHits$rank), ]
+
+rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
+fpath <- "ranked_genes.rds"
+saveRDS(outputHits, fpath)
+```
