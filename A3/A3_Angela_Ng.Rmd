@@ -32,6 +32,8 @@ It's important note the normalization and data processing methods were not clear
 
 Due to the results seen from the plots after TMM normalization and lack of information in the paper about normalization methods used other than RPKM, it was concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable.
 
+Density plots of DCM, ICM, and NF with just RPKM normalization can be found in the appendix.
+
 ## Differential gene expression and preliminary over-representation analysis
 
 In Assignment 2, the normalized expression data was ranked based on their differential expression and a threshold over-representation analysis (ORA) was performed highlighting the dominant themes in the gene list.  It was found the dominant themes were mitochondria, metabolic processes, and gene expression such as in transcription and translation.
@@ -161,7 +163,7 @@ a2UpResults <- readRDS(upFilePath)
 head(a2UpResults)
 ```
 
-Table 3: Enriched gene sets from thresholded GSEA (threshold: 0.05) using up regulated genes only
+Table 3: Enriched gene sets from thresholded GSEA (threshold: 0.05) using up regulated genes only.
 
 The results for the down regulated genes in Assignment 2 were: 
 
@@ -174,7 +176,7 @@ head(a2DownResults)
 
 Table 4: Enriched gene sets from thresholded GSEA (threshold: 0.05) using down regulated genes only.
 
-The threshold for both up and down was 0.05 and FDR was used for multiple hypothesis testing correction.
+The threshold for both up and down regulated genes was 0.05 and FDR was used for multiple hypothesis testing correction.
 
 Based on the results from Assignment 2 the main themes for the up regulated genes is relatively consistent. The top two results in Table 3, thresholded GSEA, are mitochondrial gene expression and in Table 1, non-thresholded GSEA, all the results except the second are for mitochondrial translation. However, there are some differences in that the thresholded analysis results seem more general in that it mainly highlights gene expression while the non-thresholded analysis results seem a bit more specific.  Non-thresholded results seem more specific since it highlights they are mainly localized in the mitochondria and it indicates which parts of translation it relates to.  In the thresholded results there are results for non-mitochondrial translation such as cytoplasmic translation which is less specific.  
 
@@ -190,7 +192,7 @@ These results still align with the experiment conditions, namely the samples and
 
 There are 136 nodes and 230 edges in the resulting map.  An FDR q-value of 1.0 was used and a p-value of 0.01.
 
-![Figure 1: Initial enrichment map prior to manual layout](figures/initial_enrichment_map.png)
+![Figure 1: Initial enrichment map prior to manual layout.](figures/initial_enrichment_map.png)
 
 **2. Annotate your network - what parameters did you use to annotate the network. If you are using the default parameters make sure to list them as well.**
 
@@ -200,27 +202,27 @@ The AutoAnnotate app that came with the EnrichmentMap pipeline was used to annot
 
 Below in Figure 2 is the publication ready figure.
 
-![Figure 2: Enrichment map annotated with AutoAnnotate](figures/pub_ready_overall_network_annotated.png)
+![Figure 2: Enrichment map annotated with AutoAnnotate.](figures/pub_ready_overall_network_annotated.png)
 
-![Figure 5: Closeup of the legend for the annotated enrichment map.](figures/legend.jpg)
+![Figure 3: Closeup of the legend for the annotated enrichment map.](figures/legend.jpg)
 
 **4. Collapse your network to a theme network. What are the major themes present in this analysis? Do they fit with the model? Are there any novel pathways or themes?**
 
-Below in Figure 6 is the collapsed theme network generated from using "Collapse All" in AutoAnnotate.
+Below in Figure 4 is the collapsed theme network generated from using "Collapse All" in AutoAnnotate.
 
-![Figure 6: Collapsed theme network generated from using the "Collapse All" function in AutoAnnotate.](figures/collapsed_theme_network.png)
+![Figure 4: Collapsed theme network generated from using the "Collapse All" function in AutoAnnotate.](figures/collapsed_theme_network.png)
 
-Major themes seen include arrhythmia of the heart (Figure 8), mitochondrial translation (Figure 9), cell signalling and immune pathways (Figure 10).
+Major themes seen include arrhythmia of the heart (Figure 5), mitochondrial translation (Figure 6), cell signalling and immune pathways (Figure 7).
 
-![Figure 8: Arrhythmia of the heart as a major theme.](figures/arrhythmia.png)
+![Figure 5: Arrhythmia of the heart as a major theme.](figures/arrhythmia.png)
 
 Considering this study looked at samples with heart disease (DCM, ICM, and NF) it is not surprising to find themes regarding arrhythmias of the heart.  Having these heart diseases can cause irregular heart rhythms.  
 
-![Figure 9: Mitochondrial translation as a major theme.](figures/mitochondrial_gene_expression.png)
+![Figure 6: Mitochondrial translation as a major theme.](figures/mitochondrial_gene_expression.png)
 
-![Figure 10: Cell signalling and immune system as a major theme.](figures/signalling.png)
+![Figure 7: Cell signalling and immune system as a major theme.](figures/signalling.png)
 
-Figure 10 shows cell signalling and immune system as major themes.  In particular il2 is Interleukin 2, a cytokine signalling molecule in the immune system. 
+Figure 7 shows cell signalling and immune system as major themes.  In particular il2 is Interleukin 2, a cytokine signalling molecule in the immune system. 
 
 These major themes make sense for the disease being studied.  Cardiomyopathy can cause arrhythmias since the heart has difficulty pumping blood through the body. DCM has been shown to be enriched in pathways for cell-cell and cell-matrix interactions.  ICM has been shown to have cytoskeletal and immune pathways enriched.  Both ICM and DCM have also been shown to share mitochondrial dysregulation as common pathways too [@HeartPaper1].
 
@@ -244,9 +246,9 @@ This evidence supports the result found here that gene expression especially in 
 
 # Post analysis
 
-For the post analysis,  I chose to add drugs to my network. The drugs added were verapamil, lidocaine,  mexiletine, sacubitril, valsartan, digoxin, atenolol, nebivolol, and sotalol.  I chose these drugs because they are common drugs prescribed to those with ICM and DCM [@DCMICMDrugs].  These drugs are also common in treating heart failure in general [@DCMDrugs].  In particular, I was interested in seeing verapamil since it's used to treat arrhythmia, a common symptom of ICM and DCM [@Verapamil]. Similarly, soltalol is used to treat arrhythmia and it was related to the "sotalol action antiarrhythmic" node in the collapsed network [@Soltalol].
+For the post analysis,  I chose to add drugs to my network. The drugs added were verapamil, lidocaine,  mexiletine, sacubitril, valsartan, digoxin, atenolol, nebivolol, and sotalol.  I chose these drugs because they are common drugs prescribed to those with ICM and DCM [@DCMICMDrugs].  These drugs are also common in treating heart failure in general [@DCMDrugs].  In particular, I was interested in seeing verapamil since it's used to treat arrhythmia, a common symptom of ICM and DCM [@Verapamil]. Similarly, soltalol is used to treat arrhythmia and it was related to the "sotalol action antiarrhythmic" node in the collapsed network seen in Figure 5 [@Soltalol].
 
-![Figure 8: Network with 8 drugs added.](figures/lidocaine.png)
+![Figure 8: Network with 9 drugs added.](figures/lidocaine.png)
 
 Of the 9 drugs added there were 2 were found to be statistically significant with a threshold of 0.05 using the one sided Mann-Whitney test.  They were verapamil and soltalol.  
 
@@ -267,5 +269,15 @@ The authors of the original paper did a comparison between each pair of cohorts 
 # Journal entry link
 
 The link to the corresponding journal entry can be found [here](https://github.com/bcb420-2023/Angela_Ng/wiki/Assignment-%233:-Data-set-Pathway-and-Network-Analysis).
+
+# Appendix
+
+Note these plot the density vs mean RPKM.  RPKM less than 5 in genes across all samples have been filtered out so its possible that genes with mean less than 5 exist in one cohort but their overall mean RPKM across all samples is greater than or equal to five.  Hence, it's possible to have the small bump before 5.
+
+![Supplemental Figure 1: Density plot of NF](figures/density_nf.png)
+
+![Supplemental Figure 2: Density plot of DCM](figures/density_dcm.png)
+
+![Supplemental Figure 3: Density plot of ICM](figures/density_icm.png)
 
 # References
