@@ -16,7 +16,30 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 # Introduction
 
-Mention what has been done to the data from Assignment 1 and Assignment 2.  Note the data from Assignment 2 hasn't been ranked yet.
+## Data set being analyzed and motivations
+
+Currently, 6.5 million adult Americans are affected by heart failure.  Heart failure has a 5 year mortality rate, despite later-stage heart failure with reduced ejection fraction (HFrEF) showing diverse etiologies and genetic contributions they are still considered to evolve via a final common pathway.  Current therapies are relatively indifferent to disease etiology and treat HFrEF due to ischemic cardiomyopathy (ICM) the same as dilated cardiomyopathy (DCM), even though ICM has a much worse prognosis than DCM.  This can be an indication of an incomplete understanding of the different biological mechanisms contributing to HFrEF [@HeartPaper1].
+
+Throughout the course of the term the data set being studied involved 64 human left ventricular samples, 37 of which are from DCM, 13 from ICM, and 14 from non-failing hearts (NF) were studied.  The study in which the data originated from aimed to uncover common and etiology-specific gene signatures between the three cohorts [@HeartPaper1].
+
+This data set was downloaded from the Gene Expression Omnibus (GEO) and has a GEO accession of [GSE116250](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE116250).
+
+## Normalization and initial data exploration
+
+In Assignment 1, the data set has been normalized using RPKM and genes with mean RPKM across all samples less than five have been filtered out to remove some noise.  The decision to use RPMK as the normalization method was that of the authors since the data set posted to GEO was in RPKM.  Prior to removing lowly expressed genes with mean RPKM less than 5 there were 57974 genes.  After removing these lowly expressed genes 12381 genes remained.
+
+It's important note the normalization and data processing methods were not clearly described by the authors in their original paper. In Assignment 1, I performed TMM normalization to see if the authors performed any normalization between samples.  The hypothesis was if the data has been normalized between samples as well then the plots before TMM normalization and after TMM normalization should be the same.  In. the density plot post TMM normalization there was a large spike at 0 essentially making all the data at one point.  This density plot does not make sense.  Furthermore, this is a drastic change to the original data and is undesired. 
+
+Due to the results seen from the plots after TMM normalization and lack of information in the paper about normalization methods used other than RPKM, it was concluded the data posted is already normalized.  Further normalization of this data results in dramatic changes to the data that isn't desirable.
+
+## Differential gene expression and preliminary over-representation analysis
+
+In Assignment 2, the normalized expression data was ranked based on their differential expression and a threshold over-representation analysis (ORA) was performed highlighting the dominant themes in the gene list.  It was found the dominant themes were mitochondria, metabolic processes, and gene expression such as in transcription and translation.
+
+This is consistent with the findings of [@HeartPaper1].  Additionally, a study by [@NaturePaper] detailed ten genes that have most commonly been implicated in DCM are mostly involved in gene expression such as in the transcription and translation process.  A study looking at candidate genes in ICM had similar results where they found that in ICM enriched pathways were found in mitochondria and gene expression such as in post-translational modification [@ICMPaper].
+
+In this final assignment a non-thresholded gene set enrichment analysis will be conducted followed by a visualization of the results in Cytoscape. with the use of the EnrichmentMap pipeline.  Finally, a post analysis will be conducted examining potential drugs being used in the treatment of these diseases.
+
 
 ```{r}
 # Install required packages 
@@ -29,14 +52,20 @@ if (!requireNamespace("tibble", quietly = TRUE)) {
 if (!requireNamespace("dplyr", quietly = TRUE)) {
   install.packages("dplyr")
 } 
-
-if(!requireNamespace("tidyr", quietly = TRUE)) {
+if (!requireNamespace("tidyr", quietly = TRUE)) {
   install.packages("tidyr")
+}
+if (!requireNamespace("readr", quietly = TRUE)) {
+  install.packages("readr")
+}
+if (!requireNamespace("fgsea", quietly = TRUE)) {
+  BiocManager::install("fgsea")
 }
 
 suppressPackageStartupMessages({
   library("tibble")
   library("dplyr")
+  library("fgsea")
 })
 ```
 
@@ -56,24 +85,143 @@ if (file.exists(rankFile)) {
   outputHitsFileName <- "output_hits.rds"
   outputHits <- readRDS(outputHitsFileName)
   
-  # calculate the ranks for the differentially expressed genes
-  outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
+  outputHits <- tibble::as_tibble(outputHits)
   
-  # order based on decreasing rank
-  outputHits <- outputHits[order(-outputHits$rank), ]
+  # calculate the rank
+  outputHits$rank <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
   
   # save for future use
   saveRDS(outputHits, rankFile)
   
-  # filter to only the gene name and rank
-  rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
+  # only keep gene symbol and rank column
+  rankedGenes <- dplyr::select(outputHits, hgnc_symbol, rank)
+  
+ 
+  
+  
+  # # calculate the ranks for the differentially expressed genes
+  # outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
+  # 
+  # # order based on decreasing rank
+  # outputHits <- outputHits[order(-outputHits$rank), ]
+  # 
+  # # save for future use
+  # saveRDS(outputHits, rankFile)
+  # 
+  # # filter to only the gene name and rank
+  # rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
 }
 
 # convert ranked list to tibble
-rankedGenes <- tibble::as_tibble(rankedGenes)
+# rankedGenes <- tibble::as_tibble(rankedGenes)
 ```
 
+```{r, eval=FALSE}
+# make a file just the genes and the ranks
+rankGenesOnly <- "rank_list2.tsv"
+readr::write_tsv(rankedGenes, rankGenesOnly)
+```
+
+```{r}
+outputFile <- "output_hits.rds"
+if (file.exists(outputFile)) {
+  a <- readRDS(outputFile)
+}
+
+```
 # Non-thresholded Gene set Enrichment Analysis
+
+Tried using the GUI and now trying with `fgsea`.
+```{r}
+# download the with IEA genesets
+```
+
+```{r}
+
+# Change to use the with IEA and see difference
+
+pathways <- fgsea::gmtPathways("Human_GOBP_AllPathways_no_GO_iea_March_02_2023_symbol.gmt")
+
+gseaResults <- fgsea::fgsea(pathways = pathways, 
+                            stats = tibble::deframe(rankedGenes), 
+                            maxSize = 200, 
+                            minSize = 15, 
+                            nperm = 1000)
+
+# order results in descending value of NES (enrichment score normalized to mean enrichment of random samples of the same size)
+gseaResults <- tibble::as_tibble(gseaResults) 
+
+gseaResultsTop <- gseaResults %>% dplyr::arrange(desc(NES))
+
+head(gseaResultsTop)
+
+# view the results in decreasing NES, the bottom of the list
+
+gseaResultsBottom <- gseaResults %>% dplyr::arrange(NES)
+
+head(gseaResultsBottom)
+```
+
+**1. What method did you use? What genesets did you use? Make sure to specify versions and cite your methods.**
+
+Add labels to tables
+
+**2. Summarize your enrichment results.**
+
+**3. How do these results compare to the results from the thresholded analysis in Assignment #2. Compare qualitatively. Is this a straight forward comparison? Why or why not?**
+
+Save gostupfilteredresults and gostdownfilteredresults to compare and the results for each annotation source.
+
 # Visualize Gene set Enrichment Analysis in Cytoscape
+
+**1. Create an enrichment map - how many nodes and how many edges in the resulting map? What thresholds were used to create this map? Make sure to record all thresholds. Include a screenshot of your network prior to manual layout.**
+
+There are 4304 nodes and 31962 edges in the resulting map.  An FDR q-value of 1.0 was used and a p-value of 0.05.  A more permissive q-value was chosen to allow for more results past correction.  Initially when the default FDR q-value was used, 0.1, there were 7 nodes and 10 edges.
+
+![Figure 1: Initial enrichment map prior to manual layout](figures/initial_enrichment_map.png)
+
+**2. Annotate your network - what parameters did you use to annotate the network. If you are using the default parameters make sure to list them as well.**
+
+AutoAnnotate was used to annotate the network.  The parameters used were the MCL Cluster algorithm and annotate with a maximum of 50 annotations to allow for a more readable network.  The label column was GS_DESCR.  The option to layout clusters to minimize overlap was chosen to further increase the readability of the graph.
+
+
+**3. Make a publication ready figure - include this figure with proper legends in your notebook.**
+
+Below in Figure 2 is the publication ready figure.  Figure 3 is a closeup of the main cluster.
+
+![Figure 2: Enrichment map annotated with AutoAnnotate](figures/overall_network_annotated.png)
+
+![Figure 3: Close up of the main cluster in annotated enrichment map](figures/closeup_main_clusters.png)
+
+![Figure 4: Close up of smaller cluster in annotated enrichment map](figures/closeup_smaller_cluster.png)
+
+![Figure 5:  Pub ready figure](figures/publication_ready_figure.png)
+
+
+**4. Collapse your network to a theme network. What are the major themes present in this analysis? Do they fit with the model? Are there any novel pathways or themes?**
+
+![Figure 6: Collapsed theme network](figures/collapsed_theme_network.png)
+
+The major themes can be seen in Figure 7.  They include pathways involving the human epidermal growth factor and anti arrhythmic drugs.  Considering this study looked at samples with heart disease (DCM, ICM, and NF) it is not surprising to find themes regarding arrhythmias of the heart.  Having these heart diseases can cause irregular heart rhythms.  Regarding epidermal growth factors, this is also consistent with the samples/disease being studied.  DCM and ICM are subtypes of cardiomyopathy which is a heart disease making it harder for the heart to pump blood to the rest of the body so with this knowledge its possible pathways involving muscles are enriched.
+
+![Figure 7: Major themes in the analysis](figures/major_themes.png)
+
+TO create the summary network go to AutoAnnotate panel on the left and click the hamburger menu then create summary networks
+
 # Interpretation and detailed view of results
+
+**1. Do the enrichment results support conclusions or mechanism discussed in the original paper? How do these results differ from the results you got from Assignment #2 thresholded methods**
+
+**2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your result?**
+
+# Post analysis
+
+1. 
+
+Paper talking about some drugs
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3447189/
+Paper about miRNAs in heart diseases:
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6678080/
+
 # References
+https://cytoscape.org/cytoscape-tutorials/protocols/enrichmentmap-pipeline/#/visualize
