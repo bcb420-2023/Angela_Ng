@@ -195,31 +195,32 @@ There are 4304 nodes and 31962 edges in the resulting map.  An FDR q-value of 1.
 
 **2. Annotate your network - what parameters did you use to annotate the network. If you are using the default parameters make sure to list them as well.**
 
-AutoAnnotate was used to annotate the network.  The parameters used were the MCL Cluster algorithm and annotate with a maximum of 50 annotations to allow for a more readable network.  The label column was GS_DESCR.  The option to layout clusters to minimize overlap was chosen to further increase the readability of the graph.
-
+The AutoAnnotate app that came with the EnrichmentMap pipeline was used to annotate the network.  The parameters used were the MCL Cluster algorithm and annotate with a maximum of 50 annotations to allow for a more readable network.  The label column was GS_DESCR.
 
 **3. Make a publication ready figure - include this figure with proper legends in your notebook.**
 
-Below in Figure 2 is the publication ready figure.  Figure 3 is a closeup of the main cluster.
+Below in Figure 2 is the publication ready figure.  Subsequent figures, Figures 3 to 5 are closeups of specific parts of the network and legend respectively.
 
-![Figure 2: Enrichment map annotated with AutoAnnotate](figures/overall_network_annotated.png)
+![Figure 2: Enrichment map annotated with AutoAnnotate](figures/pub_ready_overall_network_annotated.png)
 
-![Figure 3: Close up of the main cluster in annotated enrichment map](figures/closeup_main_clusters.png)
+![Figure 3: Close up of the main clusters in annotated enrichment map](figures/closeup_main_clusters.png)
 
-![Figure 4: Close up of smaller cluster in annotated enrichment map](figures/closeup_smaller_cluster.png)
+![Figure 4: Close up of smaller clusters in annotated enrichment map](figures/closeup_smaller_clusters.png)
 
-![Figure 5:  Pub ready figure](figures/publication_ready_figure.png)
+![Figure 5: Closeup of the legend for the annotated enrichment map.](figures/legend.jpg)
 
 
 **4. Collapse your network to a theme network. What are the major themes present in this analysis? Do they fit with the model? Are there any novel pathways or themes?**
 
-![Figure 6: Collapsed theme network](figures/collapsed_theme_network.png)
+Below in Figure 6 is the collapsed theme network generated from using "Collapse All" in AutoAnnotate.
 
-The major themes can be seen in Figure 7.  They include pathways involving the human epidermal growth factor and anti arrhythmic drugs.  Considering this study looked at samples with heart disease (DCM, ICM, and NF) it is not surprising to find themes regarding arrhythmias of the heart.  Having these heart diseases can cause irregular heart rhythms.  Regarding epidermal growth factors, this is also consistent with the samples/disease being studied.  DCM and ICM are subtypes of cardiomyopathy which is a heart disease making it harder for the heart to pump blood to the rest of the body so with this knowledge its possible pathways involving muscles are enriched.
+![Figure 6: Collapsed theme network generated from using the "Collapse All" function in AutoAnnotate.](figures/collapsed_theme_network.png)
+
+The major themes can be seen in Figure 7.  They include pathways involving the human epidermal growth factor (EGF) and anti arrhythmic drugs.  Considering this study looked at samples with heart disease (DCM, ICM, and NF) it is not surprising to find themes regarding arrhythmias of the heart.  Having these heart diseases can cause irregular heart rhythms.  
+
+Regarding epidermal growth factors, this is slightly a more novel pathway.  In previous analyses and the original paper it mentions the main pathways in DCM and ICM are involved in mitochondria dysfunction, cell-cell interactions and immune response [@HeartPaper1].  However, this is still consistent with the samples/disease being studied.  DCM and ICM are subtypes of cardiomyopathy which is a heart disease making it harder for the heart to pump blood to the rest of the body.  A potential reason that can explain why it is more difficult for those with DCM and ICM to pump blood to the rest of the body could be related to dysregulation in epidermal growth factors.  This dysregulation could affect the composition of the heart and as a result its function as a muscle.
 
 ![Figure 7: Major themes in the analysis](figures/major_themes.png)
-
-TO create the summary network go to AutoAnnotate panel on the left and click the hamburger menu then create summary networks
 
 # Interpretation and detailed view of results
 
