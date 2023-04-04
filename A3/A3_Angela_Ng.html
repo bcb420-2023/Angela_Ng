@@ -1735,10 +1735,10 @@ A study looking at candidate genes in ICM had similar results where they
 found that in ICM enriched pathways were found in mitochondria and gene
 expression such as in post-translational modification <span class="citation">(Dang et al. 2020)</span>.</p>
 <p>In this final assignment a non-thresholded gene set enrichment
-analysis will be conducted followed by a visualization of the results in
-Cytoscape. with the use of the EnrichmentMap pipeline. Finally, a post
-analysis will be conducted examining potential drugs being used in the
-treatment of these diseases.</p>
+analysis (GSEA) will be conducted followed by a visualization of the
+results in Cytoscape. with the use of the EnrichmentMap pipeline.
+Finally, a post analysis will be conducted examining potential drugs
+being used in the treatment of these diseases.</p>
 <pre class="r"><code># Install required packages 
 if (!requireNamespace(&quot;BiocManager&quot;, quietly = TRUE)) {
   install.packages(&quot;BiocManager&quot;)
@@ -1790,78 +1790,145 @@ if (file.exists(rankFile)) {
   
   # only keep gene symbol and rank column
   rankedGenes &lt;- dplyr::select(outputHits, hgnc_symbol, rank)
-  
- 
-  
-  
-  # # calculate the ranks for the differentially expressed genes
-  # outputHits[, &quot;rank&quot;] &lt;- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
-  # 
-  # # order based on decreasing rank
-  # outputHits &lt;- outputHits[order(-outputHits$rank), ]
-  # 
-  # # save for future use
-  # saveRDS(outputHits, rankFile)
-  # 
-  # # filter to only the gene name and rank
-  # rankedGenes &lt;- outputHits[, c(&quot;hgnc_symbol&quot;, &quot;rank&quot;)]
-}
-
-# convert ranked list to tibble
-# rankedGenes &lt;- tibble::as_tibble(rankedGenes)</code></pre>
-<pre class="r"><code># make a file just the genes and the ranks
-rankGenesOnly &lt;- &quot;rank_list2.tsv&quot;
-readr::write_tsv(rankedGenes, rankGenesOnly)</code></pre>
-<pre class="r"><code>outputFile &lt;- &quot;output_hits.rds&quot;
-if (file.exists(outputFile)) {
-  a &lt;- readRDS(outputFile)
 }</code></pre>
 </div>
 </div>
 <div id="non-thresholded-gene-set-enrichment-analysis" class="section level1">
 <h1>Non-thresholded Gene set Enrichment Analysis</h1>
-<p>Tried using the GUI and now trying with <code>fgsea</code>.</p>
-<pre class="r"><code># download the with IEA genesets</code></pre>
-<pre class="r"><code># Change to use the with IEA and see difference
+<p>Next, let’s conduct a no-thresholded gene set enrichment
+analysis.</p>
+<pre class="r"><code># load in the gene set to use from Bader labs
 
 pathways &lt;- fgsea::gmtPathways(&quot;Human_GOBP_AllPathways_no_GO_iea_March_02_2023_symbol.gmt&quot;)
 
+# conduct gsea
 gseaResults &lt;- fgsea::fgsea(pathways = pathways, 
                             stats = tibble::deframe(rankedGenes), 
                             maxSize = 200, 
                             minSize = 15, 
                             nperm = 1000)
 
-# order results in descending value of NES (enrichment score normalized to mean enrichment of random samples of the same size)
-gseaResults &lt;- tibble::as_tibble(gseaResults) 
-
+gseaResults &lt;- tibble::as_tibble(gseaResults) </code></pre>
+<p>Let’s examine the top few gene sets overrepresented at the top of the
+ranked list.</p>
+<pre class="r"><code># order results in descending value of NES (enrichment score normalized to mean enrichment of random samples of the same size)
 gseaResultsTop &lt;- gseaResults %&gt;% dplyr::arrange(desc(NES))
 
+# view the results associated with the top of the list with largest NES
 head(gseaResultsTop)</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["pathway"],"name":[1],"type":["chr"],"align":["left"]},{"label":["pval"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["padj"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["ES"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["NES"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["nMoreExtreme"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["size"],"name":[7],"type":["int"],"align":["right"]},{"label":["leadingEdge"],"name":[8],"type":["list"],"align":["right"]}],"data":[{"1":"MITOCHONDRIAL GENE EXPRESSION%GOBP%GO:0140053","2":"0.001219512","3":"0.3686533","4":"0.6105525","5":"2.016422","6":"0","7":"128","8":"<chr [39]>"},{"1":"ROLE OF LAT2 NTAL LAB ON CALCIUM MOBILIZATION%REACTOME%R-HSA-2730905.2","2":"0.001533742","3":"0.3686533","4":"0.7547825","5":"1.963202","6":"0","7":"28","8":"<chr [4]>"},{"1":"MITOCHONDRIAL TRANSLATION%GOBP%GO:0032543","2":"0.001221001","3":"0.3686533","4":"0.6045162","5":"1.959300","6":"0","7":"105","8":"<chr [30]>"},{"1":"MITOCHONDRIAL TRANSLATION%REACTOME%R-HSA-5368287.1","2":"0.001256281","3":"0.3686533","4":"0.6130148","5":"1.942352","6":"0","7":"92","8":"<chr [27]>"},{"1":"MITOCHONDRIAL TRANSLATION INITIATION%REACTOME DATABASE ID RELEASE 83%5368286","2":"0.001264223","3":"0.3686533","4":"0.6168277","5":"1.941317","6":"0","7":"86","8":"<chr [26]>"},{"1":"MITOCHONDRIAL TRANSLATION TERMINATION%REACTOME DATABASE ID RELEASE 83%5419276","2":"0.001264223","3":"0.3686533","4":"0.5844960","5":"1.839561","6":"0","7":"86","8":"<chr [37]>"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["pathway"],"name":[1],"type":["chr"],"align":["left"]},{"label":["pval"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["padj"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["ES"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["NES"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["nMoreExtreme"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["size"],"name":[7],"type":["int"],"align":["right"]},{"label":["leadingEdge"],"name":[8],"type":["list"],"align":["right"]}],"data":[{"1":"MITOCHONDRIAL GENE EXPRESSION%GOBP%GO:0140053","2":"0.001257862","3":"0.2574316","4":"0.6105525","5":"2.039874","6":"0","7":"128","8":"<chr [39]>"},{"1":"ROLE OF LAT2 NTAL LAB ON CALCIUM MOBILIZATION%REACTOME%R-HSA-2730905.2","2":"0.001555210","3":"0.2574316","4":"0.7547825","5":"1.990106","6":"0","7":"28","8":"<chr [4]>"},{"1":"MITOCHONDRIAL TRANSLATION%GOBP%GO:0032543","2":"0.001291990","3":"0.2574316","4":"0.6045162","5":"1.984223","6":"0","7":"105","8":"<chr [30]>"},{"1":"MITOCHONDRIAL TRANSLATION%REACTOME%R-HSA-5368287.1","2":"0.001317523","3":"0.2574316","4":"0.6130148","5":"1.982851","6":"0","7":"92","8":"<chr [27]>"},{"1":"MITOCHONDRIAL TRANSLATION INITIATION%REACTOME DATABASE ID RELEASE 83%5368286","2":"0.001312336","3":"0.2574316","4":"0.6168277","5":"1.979318","6":"0","7":"86","8":"<chr [26]>"},{"1":"MITOCHONDRIAL TRANSLATION TERMINATION%REACTOME DATABASE ID RELEASE 83%5419276","2":"0.001312336","3":"0.2574316","4":"0.5844960","5":"1.875570","6":"0","7":"86","8":"<chr [37]>"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
-<pre class="r"><code># view the results in decreasing NES, the bottom of the list
-
+<p>Table 1: Results from GSEA of top 6 gene sets overrepresented at the
+top of the ranked list.</p>
+<p>Next, let’s look at the results of the top 6 gene sets
+overrepresented at the bottom of the ranked list.</p>
+<pre class="r"><code># view the results associated with the bottom of the list with lowest NES
 gseaResultsBottom &lt;- gseaResults %&gt;% dplyr::arrange(NES)
 
 head(gseaResultsBottom)</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["pathway"],"name":[1],"type":["chr"],"align":["left"]},{"label":["pval"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["padj"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["ES"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["NES"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["nMoreExtreme"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["size"],"name":[7],"type":["int"],"align":["right"]},{"label":["leadingEdge"],"name":[8],"type":["list"],"align":["right"]}],"data":[{"1":"DISEASES ASSOCIATED WITH GLYCOSAMINOGLYCAN METABOLISM%REACTOME DATABASE ID RELEASE 83%3560782","2":"0.002958580","3":"0.3686533","4":"-0.6687958","5":"-2.022524","6":"0","7":"29","8":"<chr [18]>"},{"1":"PROTEOGLYCAN METABOLIC PROCESS%GOBP%GO:0006029","2":"0.003086420","3":"0.3686533","4":"-0.6031322","5":"-1.946233","6":"0","7":"36","8":"<chr [20]>"},{"1":"HEPARAN SULFATE HEPARIN (HS-GAG) METABOLISM%REACTOME%R-HSA-1638091.1","2":"0.005714286","3":"0.4281873","4":"-0.6165157","5":"-1.862468","6":"1","7":"28","8":"<chr [17]>"},{"1":"PROTEOGLYCAN BIOSYNTHETIC PROCESS%GOBP%GO:0030166","2":"0.005714286","3":"0.4281873","4":"-0.6086672","5":"-1.838758","6":"1","7":"28","8":"<chr [16]>"},{"1":"AMINE METABOLIC PROCESS%GOBP%GO:0009308","2":"0.003003003","3":"0.3686533","4":"-0.5554446","5":"-1.742746","6":"0","7":"33","8":"<chr [14]>"},{"1":"POSITIVE REGULATION OF ENDOTHELIAL CELL PROLIFERATION%GOBP%GO:0001938","2":"0.003597122","3":"0.3915331","4":"-0.5068812","5":"-1.724417","6":"0","7":"52","8":"<chr [19]>"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["pathway"],"name":[1],"type":["chr"],"align":["left"]},{"label":["pval"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["padj"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["ES"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["NES"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["nMoreExtreme"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["size"],"name":[7],"type":["int"],"align":["right"]},{"label":["leadingEdge"],"name":[8],"type":["list"],"align":["right"]}],"data":[{"1":"DISEASES ASSOCIATED WITH GLYCOSAMINOGLYCAN METABOLISM%REACTOME DATABASE ID RELEASE 83%3560782","2":"0.002824859","3":"0.2574316","4":"-0.6687958","5":"-2.009681","6":"0","7":"29","8":"<chr [18]>"},{"1":"PROTEOGLYCAN METABOLIC PROCESS%GOBP%GO:0006029","2":"0.003012048","3":"0.2574316","4":"-0.6031322","5":"-1.914122","6":"0","7":"36","8":"<chr [20]>"},{"1":"HEPARAN SULFATE HEPARIN (HS-GAG) METABOLISM%REACTOME%R-HSA-1638091.1","2":"0.002785515","3":"0.2574316","4":"-0.6165157","5":"-1.833256","6":"0","7":"28","8":"<chr [17]>"},{"1":"PROTEOGLYCAN BIOSYNTHETIC PROCESS%GOBP%GO:0030166","2":"0.002785515","3":"0.2574316","4":"-0.6086672","5":"-1.809918","6":"0","7":"28","8":"<chr [16]>"},{"1":"DISEASES OF GLYCOSYLATION%REACTOME DATABASE ID RELEASE 83%3781865","2":"0.004219409","3":"0.3130258","4":"-0.4642404","5":"-1.744572","6":"0","7":"88","8":"<chr [39]>"},{"1":"AMINE METABOLIC PROCESS%GOBP%GO:0009308","2":"0.002915452","3":"0.2574316","4":"-0.5554446","5":"-1.720877","6":"0","7":"33","8":"<chr [14]>"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
+<p>Table 2: Results from GSEA of top 6 gene sets overrepresented at the
+bottom of the ranked list.</p>
 <p><strong>1. What method did you use? What genesets did you use? Make
 sure to specify versions and cite your methods.</strong></p>
-<p>Add labels to tables</p>
+<p>I decided to use the function <code>fgsea</code> from the R package
+<code>fgsea</code> for the gene set enrichment analysis. It uses a fast
+algorithm for the GSEA allowing more permutations in a shorter amount of
+computation time <span class="citation">(Korotkevich et al.
+2016)</span>. It allows for the GSEA to be computed on the fly in a
+short amount of time and when compared to the GSEA Java app it gives
+similar results.</p>
+<p>The gene sets I used were from the Bader Lab dated March 2, 2023.
+They include all human pathways from GO Biological Process and they do
+not have inferred electronic annotations <span class="citation">(BaderLab 2023)</span>. No electronic annotations were
+chosen to reduce noise and ensure higher accuracy of the results.</p>
 <p><strong>2. Summarize your enrichment results.</strong></p>
+<p>From the GSEA the gene sets associated with the genes overrepresented
+at the top of the ranked list are more correlated with mitochondrial
+gene expression such as translation initiation and translation
+termination, seen in Table 1. In Table 2, it shows that the genes sets
+associated with the genes overrepresented at the bottom of the ranked
+list are more correlated with metabolic processes like glycosaminoglycan
+metabolism and proteoglycan metabolism.</p>
+<p>This indicates that those with DCM and ICM experience more
+mitochondrial dysfunction. This is consistent with what the authors have
+found in their paper <span class="citation">(Sweet et al. 2018)</span>.
+It also shows that there are common pathways of mitochondrial
+dysfunction in DCM and ICM. For the gene sets enriched at the bottom of
+the ranked list it indicates there is enrichment in metabolic processes
+with the top one being glycosaminoglycan metabolism. Glycosaminoglycans
+are key players in organizing the extra cellular matrix, cell-matrix
+interactions and signal regulations <span class="citation">(Ricard-Blum
+and Perez 2022)</span>. Literature shows that the extracellular matrix
+is crucial in cardiac homeostasis as it provides structural support and
+facilitates key signals to cardiomyocytes, vascular cells, and
+interstitial cells. Changes in such can potentially cause heart failure
+<span class="citation">(Frangogiannis 2019)</span>. Thus gene sets more
+correlated with bottom of the ranked list are related to the
+extracellular matrix and cell-cell interactions.</p>
 <p><strong>3. How do these results compare to the results from the
 thresholded analysis in Assignment #2. Compare qualitatively. Is this a
 straight forward comparison? Why or why not?</strong></p>
-<p>Save gostupfilteredresults and gostdownfilteredresults to compare and
-the results for each annotation source.</p>
+<p>The results for the up regulated genes in Assignment 2 were:</p>
+<pre class="r"><code>upFilePath &lt;- &quot;thresholded_gsea_up.rds&quot;
+a2UpResults &lt;- readRDS(upFilePath)
+
+head(a2UpResults)</code></pre>
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["query"],"name":[1],"type":["chr"],"align":["left"]},{"label":["significant"],"name":[2],"type":["lgl"],"align":["right"]},{"label":["p_value"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["term_size"],"name":[4],"type":["int"],"align":["right"]},{"label":["query_size"],"name":[5],"type":["int"],"align":["right"]},{"label":["intersection_size"],"name":[6],"type":["int"],"align":["right"]},{"label":["precision"],"name":[7],"type":["dbl"],"align":["right"]},{"label":["recall"],"name":[8],"type":["dbl"],"align":["right"]},{"label":["term_id"],"name":[9],"type":["chr"],"align":["left"]},{"label":["source"],"name":[10],"type":["chr"],"align":["left"]},{"label":["term_name"],"name":[11],"type":["chr"],"align":["left"]},{"label":["effective_domain_size"],"name":[12],"type":["int"],"align":["right"]},{"label":["source_order"],"name":[13],"type":["int"],"align":["right"]},{"label":["parents"],"name":[14],"type":["list"],"align":["right"]}],"data":[{"1":"query_1","2":"TRUE","3":"5.032039e-17","4":"158","5":"2221","6":"68","7":"0.03061684","8":"0.4303797","9":"GO:0140053","10":"GO:BP","11":"mitochondrial gene expression","12":"16307","13":"20877","14":"<chr [1]>","_rn_":"15"},{"1":"query_1","2":"TRUE","3":"1.008881e-10","4":"130","5":"2221","6":"51","7":"0.02296263","8":"0.3923077","9":"GO:0032543","10":"GO:BP","11":"mitochondrial translation","12":"16307","13":"8100","14":"<chr [2]>","_rn_":"25"},{"1":"query_1","2":"TRUE","3":"8.496649e-07","4":"40","5":"2221","6":"21","7":"0.00945520","8":"0.5250000","9":"GO:0045454","10":"GO:BP","11":"cell redox homeostasis","12":"16307","13":"12157","14":"<chr [1]>","_rn_":"57"},{"1":"query_1","2":"TRUE","3":"9.606913e-06","4":"162","5":"2221","6":"48","7":"0.02161189","8":"0.2962963","9":"GO:0016482","10":"GO:BP","11":"cytosolic transport","12":"16307","13":"5392","14":"<chr [1]>","_rn_":"69"},{"1":"query_1","2":"TRUE","3":"4.280888e-05","4":"156","5":"2221","6":"45","7":"0.02026114","8":"0.2884615","9":"GO:0002181","10":"GO:BP","11":"cytoplasmic translation","12":"16307","13":"753","14":"<chr [1]>","_rn_":"91"},{"1":"query_1","2":"TRUE","3":"6.198557e-05","4":"158","5":"2221","6":"45","7":"0.02026114","8":"0.2848101","9":"GO:0017148","10":"GO:BP","11":"negative regulation of translation","12":"16307","13":"5452","14":"<chr [6]>","_rn_":"93"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
+<p>Table 3: Enriched gene sets from thresholded GSEA (threshold. 0.05)
+using up regulated genes only</p>
+<p>The results for the down regulated genes in Assignment 2 were:</p>
+<pre class="r"><code>downFilePath &lt;- &quot;thresholded_gsea_down.rds&quot;
+a2DownResults &lt;-  readRDS(downFilePath)
+
+head(a2DownResults)</code></pre>
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["query"],"name":[1],"type":["chr"],"align":["left"]},{"label":["significant"],"name":[2],"type":["lgl"],"align":["right"]},{"label":["p_value"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["term_size"],"name":[4],"type":["int"],"align":["right"]},{"label":["query_size"],"name":[5],"type":["int"],"align":["right"]},{"label":["intersection_size"],"name":[6],"type":["int"],"align":["right"]},{"label":["precision"],"name":[7],"type":["dbl"],"align":["right"]},{"label":["recall"],"name":[8],"type":["dbl"],"align":["right"]},{"label":["term_id"],"name":[9],"type":["chr"],"align":["left"]},{"label":["source"],"name":[10],"type":["chr"],"align":["left"]},{"label":["term_name"],"name":[11],"type":["chr"],"align":["left"]},{"label":["effective_domain_size"],"name":[12],"type":["int"],"align":["right"]},{"label":["source_order"],"name":[13],"type":["int"],"align":["right"]},{"label":["parents"],"name":[14],"type":["list"],"align":["right"]}],"data":[{"1":"query_1","2":"TRUE","3":"0.0001105716","4":"194","5":"2258","6":"54","7":"0.023914969","8":"0.2783505","9":"GO:0022618","10":"GO:BP","11":"ribonucleoprotein complex assembly","12":"16307","13":"7022","14":"<chr [3]>","_rn_":"17"},{"1":"query_1","2":"TRUE","3":"0.0011182825","4":"31","5":"2258","6":"15","7":"0.006643047","8":"0.4838710","9":"GO:0006506","10":"GO:BP","11":"GPI anchor biosynthetic process","12":"16307","13":"2297","14":"<chr [4]>","_rn_":"33"},{"1":"query_1","2":"TRUE","3":"0.0013950317","4":"142","5":"2258","6":"40","7":"0.017714792","8":"0.2816901","9":"GO:0010970","10":"GO:BP","11":"transport along microtubule","12":"16307","13":"4688","14":"<chr [3]>","_rn_":"35"},{"1":"query_1","2":"TRUE","3":"0.0016403285","4":"32","5":"2258","6":"15","7":"0.006643047","8":"0.4687500","9":"GO:0006505","10":"GO:BP","11":"GPI anchor metabolic process","12":"16307","13":"2296","14":"<chr [2]>","_rn_":"36"},{"1":"query_1","2":"TRUE","3":"0.0016530719","4":"86","5":"2258","6":"28","7":"0.012400354","8":"0.3255814","9":"GO:0080171","10":"GO:BP","11":"lytic vacuole organization","12":"16307","13":"18972","14":"<chr [1]>","_rn_":"37"},{"1":"query_1","2":"TRUE","3":"0.0016530719","4":"86","5":"2258","6":"28","7":"0.012400354","8":"0.3255814","9":"GO:0007040","10":"GO:BP","11":"lysosome organization","12":"16307","13":"2719","14":"<chr [1]>","_rn_":"39"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
+<p>Table 4: Enriched gene sets from thresholded GSEA (threshold. 0.05)
+using down regulated genes only.</p>
+<p>The threshold for both up and down was 0.05 and the FDR was used for
+multiple hypothesis testing correction.</p>
+<p>Based on the results from Assignment 2 the main themes for the up
+regulated genes is relatively consistent. The top two results in Table
+3, thresholded GSEA, are mitochondrial gene expression and in Table 1,
+non-thresholded GSEA, all the results except the second are for
+mitochondrial translation. However, there are some differences in that
+in the thresholded analysis the results seem more general while in the
+non-thresholded analysis they seem a bit more specific in that they are
+mainly localized in the mitochondria and relate to translation. For
+example, although most results relate to translation there are results
+for non-mitochondrial translation such as cytoplasmic translation.</p>
+<p>For the down-regulated genes there is more variation in the results.
+In Table 2, the non-thresholded analysis mainly shows themes in
+metabolism such as glycosaminoglycan, proteoglycan, and amine
+metabolism. Whereas in Table 4, the thresholded analysis, shows dominant
+themes in cell organization and cell structure such as lysosome
+organization.</p>
+<p>Although the results aren’t exactly the same I don’t believe they are
+necessarily in disagreement. They both align with similar more general
+themes. For example, the up regulated genes in both analysis can be said
+to be involved in translation while the down regulated genes can be
+involved in metabolism of molecules needed for cell structure and
+organization.</p>
+<p>These results still align with the experiment conditions, namely the
+samples and disease being studied. I don’t think this is a straight
+forward comparison, because different gene sets were used in these two
+analyses. It’s possible that some of the pathways are different because
+they weren’t included in the other ananlysis’s gene set.</p>
 </div>
 <div id="visualize-gene-set-enrichment-analysis-in-cytoscape" class="section level1">
 <h1>Visualize Gene set Enrichment Analysis in Cytoscape</h1>
@@ -1954,27 +2021,24 @@ Paper about miRNAs in heart diseases: <a href="https://www.ncbi.nlm.nih.gov/pmc/
 <h1>References</h1>
 <p><a href="https://cytoscape.org/cytoscape-tutorials/protocols/enrichmentmap-pipeline/#/visualize" class="uri">https://cytoscape.org/cytoscape-tutorials/protocols/enrichmentmap-pipeline/#/visualize</a></p>
 <div id="refs" class="references csl-bib-body hanging-indent">
+<div id="ref-BaderLab" class="csl-entry">
+BaderLab. 2023. <span>“Enrichment Map Gene Sets.”</span> 2023. <a href="https://baderlab.org/GeneSets">https://baderlab.org/GeneSets</a>.
+</div>
 <div id="ref-ICMPaper" class="csl-entry">
 Dang, Haiming, Yicong Ye, Xiliang Zhao, and Yong Zeng. 2020.
 <span>“Identification of Candidate Genes in Ischemic Cardiomyopathy by
 Gene Expression Omnibus Database.”</span> <em>BMC Cardiovascular
 Disorders</em> 20 (1): 1–10.
 </div>
-<div id="ref-complexHeatmap" class="csl-entry">
-Gu, Zuguang, Roland Eils, and Matthias Schlesner. 2016. <span>“Complex
-Heatmaps Reveal Patterns and Correlations in Multidimensional Genomic
-Data.”</span> <em>Bioinformatics</em> 32 (18): 2847–49.
+<div id="ref-extracellularMatrix" class="csl-entry">
+Frangogiannis, Nikolaos G. 2019. <span>“The Extracellular Matrix in
+Ischemic and Nonischemic Heart Failure.”</span> <em>Circulation
+Research</em> 125 (1): 117–46.
 </div>
-<div id="ref-circlize" class="csl-entry">
-Gu, Zuguang, Lei Gu, Roland Eils, Matthias Schlesner, and Benedikt
-Brors. 2014. <span>“Circlize Implements and Enhances Circular
-Visualization in r.”</span> <em>Bioinformatics</em> 30 (19): 2811–12.
-</div>
-<div id="ref-gprofiler2" class="csl-entry">
-Kolberg, Liis, Uku Raudvere, Ivan Kuzmin, Jaak Vilo, and Hedi Peterson.
-2020. <span>“Gprofiler2–an r Package for Gene List Functional Enrichment
-Analysis and Namespace Conversion Toolset g: Profiler.”</span>
-<em>F1000Research</em> 9.
+<div id="ref-fgsea" class="csl-entry">
+Korotkevich, Gennady, Vladimir Sukhov, Nikolay Budin, Boris Shpak, Maxim
+N Artyomov, and Alexey Sergushichev. 2016. <span>“Fast Gene Set
+Enrichment Analysis.”</span> <em>BioRxiv</em>, 060012.
 </div>
 <div id="ref-BiocManager" class="csl-entry">
 Morgan, Martin. 2022. <em>BiocManager: Access the Bioconductor Project
@@ -1988,6 +2052,11 @@ Frames</em>.
 R Core Team. 2022. <em>R: A Language and Environment for Statistical
 Computing</em>. Vienna, Austria: R Foundation for Statistical Computing.
 <a href="https://www.R-project.org/">https://www.R-project.org/</a>.
+</div>
+<div id="ref-Glycosaminoglycan" class="csl-entry">
+Ricard-Blum, Sylvie, and Serge Perez. 2022. <span>“Glycosaminoglycan
+Interaction Networks and Databases.”</span> <em>Current Opinion in
+Structural Biology</em> 74: 102355.
 </div>
 <div id="ref-limma" class="csl-entry">
 Ritchie, Matthew E, Belinda Phipson, DI Wu, Yifang Hu, Charity W Law,
@@ -2013,14 +2082,6 @@ R Sweet, Sharon L Graw, T Brett Reece, et al. 2018. <span>“Transcriptome
 Analysis of Human Heart Failure Reveals Dysregulated Cell Adhesion in
 Dilated Cardiomyopathy and Activated Immune Pathways in Ischemic Heart
 Failure.”</span> <em>BMC Genomics</em> 19: 1–14.
-</div>
-<div id="ref-stringr" class="csl-entry">
-Wickham, Hadley. 2010. <span>“Stringr: Modern, Consistent String
-Processing.”</span> <em>R J.</em> 2 (2): 38.
-</div>
-<div id="ref-ggplot2" class="csl-entry">
-———. 2016. <em>Ggplot2: Elegant Graphics for Data Analysis</em>.
-Springer-Verlag New York. <a href="https://ggplot2.tidyverse.org">https://ggplot2.tidyverse.org</a>.
 </div>
 <div id="ref-dplyr" class="csl-entry">
 Wickham, Hadley, Romain François, Lionel Henry, and Kirill Müller. 2022.

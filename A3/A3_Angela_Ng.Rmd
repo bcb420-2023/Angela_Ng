@@ -38,8 +38,7 @@ In Assignment 2, the normalized expression data was ranked based on their differ
 
 This is consistent with the findings of [@HeartPaper1].  Additionally, a study by [@NaturePaper] detailed ten genes that have most commonly been implicated in DCM are mostly involved in gene expression such as in the transcription and translation process.  A study looking at candidate genes in ICM had similar results where they found that in ICM enriched pathways were found in mitochondria and gene expression such as in post-translational modification [@ICMPaper].
 
-In this final assignment a non-thresholded gene set enrichment analysis will be conducted followed by a visualization of the results in Cytoscape. with the use of the EnrichmentMap pipeline.  Finally, a post analysis will be conducted examining potential drugs being used in the treatment of these diseases.
-
+In this final assignment a non-thresholded gene set enrichment analysis (GSEA) will be conducted followed by a visualization of the results in Cytoscape. with the use of the EnrichmentMap pipeline.  Finally, a post analysis will be conducted examining potential drugs being used in the treatment of these diseases.
 
 ```{r}
 # Install required packages 
@@ -95,82 +94,96 @@ if (file.exists(rankFile)) {
   
   # only keep gene symbol and rank column
   rankedGenes <- dplyr::select(outputHits, hgnc_symbol, rank)
-  
- 
-  
-  
-  # # calculate the ranks for the differentially expressed genes
-  # outputHits[, "rank"] <- -log(outputHits$P.Value, base = 10) * sign(outputHits$logFC) 
-  # 
-  # # order based on decreasing rank
-  # outputHits <- outputHits[order(-outputHits$rank), ]
-  # 
-  # # save for future use
-  # saveRDS(outputHits, rankFile)
-  # 
-  # # filter to only the gene name and rank
-  # rankedGenes <- outputHits[, c("hgnc_symbol", "rank")]
 }
-
-# convert ranked list to tibble
-# rankedGenes <- tibble::as_tibble(rankedGenes)
 ```
 
-```{r, eval=FALSE}
-# make a file just the genes and the ranks
-rankGenesOnly <- "rank_list2.tsv"
-readr::write_tsv(rankedGenes, rankGenesOnly)
-```
-
-```{r}
-outputFile <- "output_hits.rds"
-if (file.exists(outputFile)) {
-  a <- readRDS(outputFile)
-}
-
-```
 # Non-thresholded Gene set Enrichment Analysis
 
-Tried using the GUI and now trying with `fgsea`.
-```{r}
-# download the with IEA genesets
-```
+Next, let's conduct a no-thresholded gene set enrichment analysis.
 
 ```{r}
-
-# Change to use the with IEA and see difference
+# load in the gene set to use from Bader labs
 
 pathways <- fgsea::gmtPathways("Human_GOBP_AllPathways_no_GO_iea_March_02_2023_symbol.gmt")
 
+# conduct gsea
 gseaResults <- fgsea::fgsea(pathways = pathways, 
                             stats = tibble::deframe(rankedGenes), 
                             maxSize = 200, 
                             minSize = 15, 
                             nperm = 1000)
 
-# order results in descending value of NES (enrichment score normalized to mean enrichment of random samples of the same size)
 gseaResults <- tibble::as_tibble(gseaResults) 
+```
 
+Let's examine the top few gene sets overrepresented at the top of the ranked list.
+
+```{r}
+# order results in descending value of NES (enrichment score normalized to mean enrichment of random samples of the same size)
 gseaResultsTop <- gseaResults %>% dplyr::arrange(desc(NES))
 
+# view the results associated with the top of the list with largest NES
 head(gseaResultsTop)
+```
 
-# view the results in decreasing NES, the bottom of the list
+Table 1: Results from GSEA of top 6 gene sets overrepresented at the top of the ranked list.
 
+Next, let's look at the results of the top 6 gene sets overrepresented at the bottom of the ranked list.
+
+```{r}
+# view the results associated with the bottom of the list with lowest NES
 gseaResultsBottom <- gseaResults %>% dplyr::arrange(NES)
 
 head(gseaResultsBottom)
 ```
 
+Table 2: Results from GSEA of top 6 gene sets overrepresented at the bottom of the ranked list.
+
 **1. What method did you use? What genesets did you use? Make sure to specify versions and cite your methods.**
 
-Add labels to tables
+I decided to use the function `fgsea` from the R package `fgsea` for the gene set enrichment analysis.  It uses a fast algorithm for the GSEA allowing more permutations in a shorter amount of computation time [@fgsea]. It allows for the GSEA to be computed on the fly in a short amount of time and when compared to the GSEA Java app it gives similar results.
+
+The gene sets I used were from the Bader Lab dated March 2, 2023.  They include all human pathways from GO Biological Process and they do not have inferred electronic annotations [@BaderLab]. No electronic annotations were chosen to reduce noise and ensure higher accuracy of the results. 
 
 **2. Summarize your enrichment results.**
 
+From the GSEA the gene sets associated with the genes overrepresented at the top of the ranked list are more correlated with mitochondrial gene expression such as translation initiation and translation termination, seen in Table 1.  In Table 2, it shows that the genes sets associated with the genes overrepresented at the bottom of the ranked list are more correlated with metabolic processes like glycosaminoglycan metabolism and proteoglycan metabolism.  
+
+This indicates that those with DCM and ICM experience more mitochondrial dysfunction.  This is consistent with what the authors have found in their paper [@HeartPaper1].  It also shows that there are common pathways of mitochondrial dysfunction in DCM and ICM.  For the gene sets enriched at the bottom of the ranked list it indicates there is enrichment in metabolic processes with the top one being glycosaminoglycan metabolism.  Glycosaminoglycans are key players in organizing the extra cellular matrix, cell-matrix interactions and signal regulations [@Glycosaminoglycan].  Literature shows that the extracellular matrix is crucial in cardiac homeostasis as it provides structural support and facilitates key signals to cardiomyocytes, vascular cells, and interstitial cells.  Changes in such can potentially cause heart failure [@extracellularMatrix].  Thus gene sets more correlated with bottom of the ranked list are related to the extracellular matrix and cell-cell interactions. 
+
 **3. How do these results compare to the results from the thresholded analysis in Assignment #2. Compare qualitatively. Is this a straight forward comparison? Why or why not?**
 
-Save gostupfilteredresults and gostdownfilteredresults to compare and the results for each annotation source.
+The results for the up regulated genes in Assignment 2 were:
+
+```{r}
+upFilePath <- "thresholded_gsea_up.rds"
+a2UpResults <- readRDS(upFilePath)
+
+head(a2UpResults)
+```
+
+Table 3: Enriched gene sets from thresholded GSEA (threshold. 0.05) using up regulated genes only
+
+The results for the down regulated genes in Assignment 2 were: 
+
+```{r}
+downFilePath <- "thresholded_gsea_down.rds"
+a2DownResults <-  readRDS(downFilePath)
+
+head(a2DownResults)
+```
+
+Table 4: Enriched gene sets from thresholded GSEA (threshold. 0.05) using down regulated genes only.
+
+The threshold for both up and down was 0.05 and the FDR was used for multiple hypothesis testing correction.
+
+Based on the results from Assignment 2 the main themes for the up regulated genes is relatively consistent. The top two results in Table 3, thresholded GSEA, are mitochondrial gene expression and in Table 1, non-thresholded GSEA, all the results except the second are for mitochondrial translation. However, there are some differences in that in the thresholded analysis the results seem more general while in the non-thresholded analysis they seem a bit more specific in that they are mainly localized in the mitochondria and relate to translation.  For example, although most results relate to translation there are results for non-mitochondrial translation such as cytoplasmic translation.  
+
+For the down-regulated genes there is more variation in the results.  In Table 2, the non-thresholded analysis mainly shows themes in metabolism such as glycosaminoglycan, proteoglycan, and amine metabolism.  Whereas in Table 4, the thresholded analysis, shows dominant themes in cell organization and cell structure such as lysosome organization.
+
+Although the results aren't exactly the same I don't believe they are necessarily in disagreement.  They both align with similar more general themes.  For example, the up regulated genes in both analysis can be said to be involved in translation while the down regulated genes can be involved in metabolism of molecules needed for cell structure and organization.
+
+These results still align with the experiment conditions, namely the samples and disease being studied.  I don't think this is a straight forward comparison, because different gene sets were used in these two analyses.  It's possible that some of the pathways are different because they weren't included in the other ananlysis's gene set.
 
 # Visualize Gene set Enrichment Analysis in Cytoscape
 
