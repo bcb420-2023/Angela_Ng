@@ -226,16 +226,47 @@ Regarding epidermal growth factors, this is slightly a more novel pathway.  In p
 
 **1. Do the enrichment results support conclusions or mechanism discussed in the original paper? How do these results differ from the results you got from Assignment #2 thresholded methods**
 
+Yes, the enrichment results support the conclusions and mechanisms discussed in the original paper.  The authors found that in DCM and ICM there were pathways enriched for mitochondria and dysregulation in these pathways contribute to mitochondrial dysfunction [@HeartPaper1].  The authors also found some pathways enriched in metabolism such as oxidative phosphorylation and some of the results here in the non-thresholded analysis particularly with the down regulated genes saw the same enrichment in metabolic pathways.  The exact metabolic pathways are different but still show the theme of metabolism.
+
+The results here differ from the thresholded results in Assignment 2 in that the more specific themes are different.  In the up regulated genes in Assignment 2 there were themes of gene expression, mainly translation, in mitochondria and elsewhere.  While here in the non-thresholded analysis it shows themes of gene expression, mainly translation as well, but only in the mitochondria.  They also both include a pathway for cellular redox reactions with the non-thresholded analysis being more specific in specifying hallmark reactive oxygen species pathway.
+
+In the down-regulated genes the results are more variable.  In the thresholded analysis of Assignment 2 they were mainly related to cell structure and organization such as lysosome organization and GPI anchor biosynthetic process.  On the other hand, in the non-thresholded analysis they were mainly about metabolic processes for specific molecules like glycosaminoglycan metabolism and proteoglycan metabolism.  
+
 **2. Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your result?**
+
+Yes, there is evidence from other publications to support some of the results that are seen.  In a previous studies identifying candidate genes in ICM they found that some of the top significantly enriched pathways were related to gene expression such as post-translational modification and were involved in the mitochondria.  The authors of that study also used the data set studied here to validate their results for some of the differentially expressed genes and found the results in this study were consistent with their findings [@ICMPaper].  Publications also indicate DCM and other cardiomyopathies are associated with mitochondrial disorders, supporting the results seen here [@NaturePaper].
+
+The results here for the non-thresholded analysis show the top enriched gene set for the negatively ranked genes is diseases associated with glycosaminoglycan.  Glycosaminoglycan takes part in organizing the cellular matrix, cell-matrix interactions, and signal regulations [@Glycosaminoglycan].  It has been shown that changes to the extracellular matrix can be implicated in the pathogenisis of heart failure [@extracellularMatrix].  The authors of the original paper saw enrichment in pathways for cell-cell and cell-matrix pathways also [@HeartPaper1].
+
+This evidence supports the result found here that gene expression especially in mitochondria and metabolism are major themes in the cardiomyopathies studied here.  
 
 # Post analysis
 
-1. 
+For the post analysis,  I chose to add drugs to my network. The drugs added were verapamil, lidocaine,  mexiletine, sacubitril, valsartan, digoxin, atenolol, and nebivolol.  I chose these drugs because they are common drugs prescribed to those with ICM and DCM [@DCMICMDrugs].  These drugs are also common in treating heart failure in general [@DCMDrugs].  In particular, I was interested in seeing verapamil since "verapamil action antiarrhythmic" was a significant cluster in the network and it's used to treat arrhythmia, a common symptom of ICM and DCM [@Verapamil].  
 
-Paper talking about some drugs
-https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3447189/
-Paper about miRNAs in heart diseases:
-https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6678080/
+![Figure 8: Network with 8 drugs added.](figures/drug_overall_network.png)
+
+![Figure 9: Zoomed in legend for network with drugs.](figures/drug_legend.jpg)
+
+Of the 8 drugs added there were 5 found to be significant using the one sided Mann-Whitney test and a threshold of 0.8.  They were atenolol, digoxin, mexiletine, nebivolol, and verapamil.  In this network the orange edges represent the interactions a drug has with the pathways in the network.  The one at the very bottom is verapamil. It has the most interactions compared to all the other drugs.
+
+The other drugs, including verapamil, have interactions with other parts of the network but the main interactions target pathways related to heart contraction. Figure 10 shows the location and overall interactions of the 4 drugs excluding verapamil in yellow.
+
+![Figure 10: Network zoomed in on location of atenolol, digoxin, mexiletine, and nebivolol.](figures/other_drugs_in_network.png)
+Figure 11 below is zoomed in on the group of pathways these drugs interact the most with.
+
+![Figure 11: Pathways associated with heart contraction](figures/heart_contractions.png)
+
+These interactions make sense since those with DCM, ICM, and heart failure have trouble with heart contractions resulting in issues with blood flow and these drugs attempt to make it easier for the heart to circulate blood through the body.  For example, atenolol is used to lower blood pressure [@DCMDrugs].
+
+# Conclusion
+
+Overall, the results in these three assignments support the findings of the authors and other studies that mitochondrial dysfunction is a common pathway between DCM and ICM. There is also evidence for enrichment in metabolism of molecules important to the extracellular matrix, cell-cell interactions, and cell-matrix interactions.  Disruption to these pathways can cause heart failure.  The drugs prescribed to those with DCM and ICM are also seen to interact with pathways of expected function relating to heart contraction.
+
+The authors of the original paper did a comparison between each pair of cohorts as well to seek more fine differences between each cohort.  This includes DCM vs ICM, DCM vs NF, and ICM vs NF.  It would be interesting to do the analysis between each pair of cohorts and compare the results to the authors, however that would be quite time consuming.  It is still interesting to see the larger themes found in these analyses match those of the authors.  
+
+# Journal entry link
+
+The link to the corresponding journal entry can be found [here](https://github.com/bcb420-2023/Angela_Ng/wiki/Assignment-%233:-Data-set-Pathway-and-Network-Analysis).
 
 # References
-https://cytoscape.org/cytoscape-tutorials/protocols/enrichmentmap-pipeline/#/visualize
